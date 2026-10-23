@@ -1,0 +1,14 @@
+name = "james-dashboard-api"
+compatibility_date = "2024-09-23"
+# The frontend lives on GitHub Pages (see dashboard/). This Pages project
+# only exists to host the /functions API + D1 binding; "public" is a
+# one-file placeholder, not the real dashboard.
+pages_build_output_dir = "public"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "james-dashboard"
+database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+
+# REPORT_TOKEN is a secret, not set here. Set it with:
+#   wrangler pages secret put REPORT_TOKEN

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>James dashboard</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <h1>James</h1>
+        <div id="status-badge" class="status-badge status-badge--unknown">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">Checking status…</span>
+        </div>
+      </header>
+
+      <section class="stat-row" aria-label="Lifetime usage">
+        <div class="stat-tile">
+          <div class="stat-tile__value" id="stat-drinks">–</div>
+          <div class="stat-tile__label">Drinks served</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile__value" id="stat-alcohol">–</div>
+          <div class="stat-tile__label">Alcohol poured</div>
+        </div>
+        <div class="stat-tile">
+          <div class="stat-tile__value" id="stat-lastseen">–</div>
+          <div class="stat-tile__label">Last check-in</div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="bottles-heading">
+        <h2 id="bottles-heading">Bottles</h2>
+        <ul id="bottle-list" class="bottle-list"></ul>
+      </section>
+
+      <section class="panel" aria-labelledby="recipes-heading">
+        <h2 id="recipes-heading">Recipes</h2>
+        <div id="recipe-grid" class="recipe-grid"></div>
+      </section>
+
+      <section class="panel" aria-labelledby="pours-heading">
+        <h2 id="pours-heading">Recent pours</h2>
+        <table class="pours-table">
+          <thead>
+            <tr>
+              <th>Drink</th>
+              <th>Alcohol</th>
+              <th>When</th>
+            </tr>
+          </thead>
+          <tbody id="pours-body"></tbody>
+        </table>
+      </section>
+
+      <footer class="page-footer">
+        <a href="https://github.com/santtu-seppanen/james-final">Source on GitHub</a>
+      </footer>
+    </main>
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

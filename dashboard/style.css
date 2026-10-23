@@ -1,0 +1,250 @@
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --page-plane: #f9f9f7;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --gridline: #e1e0d9;
+  --border: rgba(11, 11, 11, 0.1);
+  --sequential-400: #3987e5;
+  --sequential-450: #2a78d6;
+  --status-good: #0ca30c;
+  --status-critical: #d03b3b;
+  --status-warning: #fab219;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page-plane: #0d0d0d;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --gridline: #2c2c2a;
+    --border: rgba(255, 255, 255, 0.1);
+    --sequential-400: #3987e5;
+    --sequential-450: #2a78d6;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --page-plane: #0d0d0d;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --gridline: #2c2c2a;
+  --border: rgba(255, 255, 255, 0.1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--page-plane);
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.status-badge--online .status-dot {
+  background: var(--status-good);
+}
+.status-badge--online #status-text,
+.status-badge--online {
+  color: var(--status-good);
+}
+
+.status-badge--offline .status-dot {
+  background: var(--status-critical);
+}
+.status-badge--offline {
+  color: var(--status-critical);
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 32px;
+}
+
+.stat-tile {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.stat-tile__value {
+  font-size: 32px;
+  font-weight: 600;
+  font-variant-numeric: proportional-nums;
+}
+
+.stat-tile__label {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.panel {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.bottle-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bottle-row {
+  display: grid;
+  grid-template-columns: 120px 1fr 90px;
+  align-items: center;
+  gap: 12px;
+}
+
+.bottle-row__name {
+  font-size: 14px;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.bottle-row__track {
+  height: 10px;
+  border-radius: 6px;
+  background: var(--gridline);
+  overflow: hidden;
+}
+
+.bottle-row__fill {
+  height: 100%;
+  background: var(--sequential-450);
+  border-radius: 6px;
+}
+
+.bottle-row__fill--low {
+  background: var(--status-critical);
+}
+
+.bottle-row__value {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.recipe-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.recipe-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.recipe-card__name {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.recipe-card__ingredients {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin: 0;
+  padding-left: 16px;
+}
+
+.pours-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.pours-table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 500;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gridline);
+}
+
+.pours-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gridline);
+  color: var(--text-secondary);
+}
+
+.empty-state {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.page-footer {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-top: 24px;
+}
+
+.page-footer a {
+  color: var(--text-secondary);
+}
