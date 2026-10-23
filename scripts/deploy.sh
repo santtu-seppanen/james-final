@@ -43,7 +43,10 @@ if [ "$LOCAL" != "$REMOTE" ]; then
 
   echo "Installing backend deps..."
   cd "$REPO_DIR/server"
-  npm install
+  # --production: the Pi's old npm (Node 10) chokes on the "npm:" alias
+  # protocol some of jest's transitive deps use, and jest is dev-only
+  # anyway (tests run on a real machine, not the Pi).
+  npm install --production
   echo "$NEW_SHA" > VERSION
   cd "$REPO_DIR"
 

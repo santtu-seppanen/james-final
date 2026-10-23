@@ -1,3 +1,8 @@
+// Load .env before anything below reads process.env (JAMES_DATA_DIR
+// especially - reading it too late silently falls back to ".", defeating
+// the whole point of keeping live state outside the git checkout).
+require("dotenv").config();
+
 const express = require("express");
 const app = express();
 var http = require("http").createServer(app);
@@ -34,20 +39,54 @@ const socketName = "servoState";
 // crontab).
 
 // First run against a fresh DATA_DIR (e.g. right after migrating to it):
-// seed the four live-state files from the committed snapshot next to this
-// file, so there's something valid to read/write instead of crashing.
-[
-  [bottlesConfig, "./bottles_config.json"],
-  [recipesConfig, "./recipes_config.json"],
-  [availableBottlesConfig, "./available_bottles_config.json"],
-  [metricsPath, "./metrics.json"],
-].forEach(([liveePath, seedPath]) => {
-  if (liveePath !== seedPath && !fs.existsSync(liveePath)) {
-    console.log("Seeding " + liveePath + " from " + seedPath);
-    fs.mkdirSync(path.dirname(liveePath), { recursive: true });
-    fs.copyFileSync(seedPath, liveePath);
+// seed bottles/recipes/available-bottles from the committed snapshot next
+// to this file, so there's something valid to read/write instead of
+// crashing. metrics.json has no committed seed (it's runtime-generated,
+// deliberately not in git) - give it an empty-but-valid default instead.
+const resolvedDataDir = path.resolve(DATA_DIR);
+if (resolvedDataDir !== path.resolve(".")) {
+  fs.mkdirSync(resolvedDataDir, { recursive: true });
+
+  [
+    [bottlesConfig, "./bottles_config.json"],
+    [recipesConfig, "./recipes_config.json"],
+    [availableBottlesConfig, "./available_bottles_config.json"],
+  ].forEach(([liveePath, seedPath]) => {
+    if (!fs.existsSync(liveePath)) {
+      console.log("Seeding " + liveePath + " from " + seedPath);
+      fs.copyFileSync(seedPath, liveePath);
+    }
+  });
+
+  if (!fs.existsSync(metricsPath)) {
+    console.log("Creating default " + metricsPath);
+    fs.writeFileSync(
+      metricsPath,
+      JSON.stringify({
+        containers: [
+          {title: "James Bottles", controls: []},
+          {
+            title: "James Drinks",
+            controls: [
+              {
+                id: 1,
+                title: "James Usage Summary",
+                splitTitle: "Drinks",
+                isActive: true,
+                type: "pie",
+                mainMetric: 0,
+                mainMetricUnit: "%",
+                summaries: [{title: "James Usage Summary", items: []}],
+                metrics: [],
+              },
+            ],
+          },
+        ],
+        origin: "server",
+      }),
+    );
   }
-});
+}
 
 const gauges = [];
 let metricsData = JSON.parse(fs.readFileSync(metricsPath));
