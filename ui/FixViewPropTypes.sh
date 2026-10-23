@@ -1,0 +1,1 @@
+echo 'export const ViewPropTypes = { style: null };' >> "node_modules/react-native-web/dist/index.js"

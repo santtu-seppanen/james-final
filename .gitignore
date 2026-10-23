@@ -1,0 +1,6 @@
+dashboard/node_modules
+dashboard/dist
+dashboard/build
+cloudflare/node_modules
+cloudflare/.wrangler
+.DS_Store
