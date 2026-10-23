@@ -224,8 +224,17 @@ app.post("/drinkme", (req, res) => {
 });
 
 app.post("/api/generate-drink", (req, res) => {
+  let existingNames = [];
+  try {
+    existingNames = Object.values(JSON.parse(fs.readFileSync(recipesConfig))).map(
+      (r) => r.friendlyname
+    );
+  } catch (e) {
+    // Fine - the prompt just won't list the menu.
+  }
+
   aiModule
-    .generateDrink(bottles)
+    .generateDrink(bottles, existingNames)
     .then((recipe) => {
       res.json(recipe);
     })

@@ -10,11 +10,15 @@
     <main class="page">
       <header class="page-header">
         <h1>James</h1>
-        <div id="status-badge" class="status-badge status-badge--unknown">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="status-text">Checking status…</span>
+        <div class="page-header__right">
+          <button type="button" id="edit-toggle" class="btn btn--ghost">Edit</button>
+          <div id="status-badge" class="status-badge status-badge--unknown">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text">Checking status…</span>
+          </div>
         </div>
       </header>
+      <p id="edit-notice" class="notice" hidden></p>
 
       <section class="stat-row" aria-label="Lifetime usage">
         <div class="stat-tile">
@@ -41,10 +45,8 @@
           <h2 id="recipes-heading">Recipes</h2>
           <span class="panel-actions">
             <button type="button" id="add-recipe" class="btn" hidden>Add drink</button>
-            <button type="button" id="edit-toggle" class="btn btn--ghost">Edit</button>
           </span>
         </div>
-        <p id="edit-notice" class="notice" hidden></p>
         <div id="recipe-grid" class="recipe-grid"></div>
       </section>
 

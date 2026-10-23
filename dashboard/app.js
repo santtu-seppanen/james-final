@@ -214,7 +214,7 @@
     editMode = on;
     document.getElementById('edit-toggle').textContent = on ? 'Done' : 'Edit';
     document.getElementById('add-recipe').hidden = !on;
-    showNotice(on ? 'Changes reach the bot within about a minute.' : '', false);
+    showNotice(on ? 'Edit mode: use the Edit buttons on bottles and drinks. Changes reach the bot within about a minute.' : '', false);
     renderRecipes(state.recipes);
     renderBottles(state.bottles);
   }

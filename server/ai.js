@@ -39,18 +39,55 @@ var PROPOSE_DRINK_TOOL = {
   },
 };
 
-function buildPrompt(bottles) {
-  var lines = bottles.map(function (b) {
+var STYLES = [
+  'a tall, refreshing long drink',
+  'something sweet and fruity',
+  'a sour, zesty drink',
+  'a strong, spirit-forward drink',
+  'a light, easy-drinking party drink',
+  'something unexpected and a bit weird',
+  'a summery drink',
+  'a drink you would find at a late-night bar',
+];
+
+function shuffle(items, rand) {
+  var a = items.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(rand() * (i + 1));
+    var tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
+  return a;
+}
+
+// The same bottles in the same order would get (nearly) the same answer
+// every time, so each request gets a shuffled bottle list, a random style and
+// a random bottle to build around, plus the names of drinks already on the
+// menu to steer away from. rand is injectable for tests.
+function buildPrompt(bottles, existingNames, rand) {
+  rand = rand || Math.random;
+  var shuffled = shuffle(bottles, rand);
+  var lines = shuffled.map(function (b) {
     return '- ' + b.name + ': ' + b.capacity + 'ml left, poured in ' + b.serving + 'ml shots';
   });
-  return (
+  var style = STYLES[Math.floor(rand() * STYLES.length)];
+  var featured = shuffled[0].name;
+
+  var prompt =
     'You are a bartender robot. Here are the bottles currently loaded, with how much is left ' +
     'and the fixed shot size each one pours in:\n\n' +
     lines.join('\n') +
     '\n\nPropose one new cocktail using 2-4 of these bottles. Each ingredient amount must be a ' +
     "whole multiple of that bottle's own shot size, and must not exceed what's left in the bottle. " +
-    'Use the propose_drink tool to answer - no other text.'
-  );
+    'Make it ' + style + ', and build it around ' + featured + '.';
+
+  if (existingNames && existingNames.length > 0) {
+    prompt += ' These drinks are already on the menu, so do not suggest them or close variants: ' +
+      existingNames.join(', ') + '.';
+  }
+
+  return prompt + ' Use the propose_drink tool to answer - no other text.';
 }
 
 function validateRecipe(recipe, bottlesByName) {
@@ -87,9 +124,10 @@ function validateRecipe(recipe, bottlesByName) {
   return null;
 }
 
-// bottles: array from bottles_config.json. Returns a Promise resolving to
+// bottles: array from bottles_config.json. existingNames: friendly names of
+// the drinks already on the menu (optional). Returns a Promise resolving to
 // {friendlyname, ingredients: [{name, serving}]} or rejecting with an Error.
-function generateDrink(allBottles) {
+function generateDrink(allBottles, existingNames) {
   if (!ANTHROPIC_API_KEY) {
     return Promise.reject(new Error('ANTHROPIC_API_KEY not set'));
   }
@@ -119,7 +157,7 @@ function generateDrink(allBottles) {
       max_tokens: 512,
       tools: [PROPOSE_DRINK_TOOL],
       tool_choice: {type: 'tool', name: 'propose_drink'},
-      messages: [{role: 'user', content: buildPrompt(bottles)}],
+      messages: [{role: 'user', content: buildPrompt(bottles, existingNames)}],
     }),
   })
     .then(function (response) {
@@ -155,4 +193,4 @@ function generateDrink(allBottles) {
     });
 }
 
-module.exports = {generateDrink: generateDrink, validateRecipe: validateRecipe};
+module.exports = {generateDrink: generateDrink, validateRecipe: validateRecipe, buildPrompt: buildPrompt};

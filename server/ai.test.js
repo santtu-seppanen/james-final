@@ -1,4 +1,4 @@
-const {validateRecipe} = require('./ai');
+const {validateRecipe, buildPrompt} = require('./ai');
 
 const bottlesByName = {
   VODKA: {name: 'vodka', capacity: 500, serving: 25},
@@ -61,5 +61,35 @@ describe('validateRecipe', () => {
   it('rejects empty ingredients', () => {
     const recipe = {friendlyname: 'Test Drink', ingredients: []};
     expect(validateRecipe(recipe, bottlesByName)).toMatch(/ingredients/);
+  });
+});
+
+describe('buildPrompt', () => {
+  const bottles = [
+    {name: 'vodka', capacity: 500, serving: 25},
+    {name: 'tonic', capacity: 500, serving: 50},
+    {name: 'cranberry', capacity: 100, serving: 50},
+  ];
+
+  // Deterministic stand-in for Math.random: cycles through the given values.
+  const seq = (...values) => {
+    let i = 0;
+    return () => values[i++ % values.length];
+  };
+
+  it('lists existing drinks to avoid', () => {
+    const prompt = buildPrompt(bottles, ['Moukku', 'Sea Breeze'], seq(0.5));
+    expect(prompt).toMatch(/already on the menu.*Moukku, Sea Breeze/);
+  });
+
+  it('varies with the random source so repeat requests differ', () => {
+    const a = buildPrompt(bottles, [], seq(0.0, 0.0, 0.0));
+    const b = buildPrompt(bottles, [], seq(0.9, 0.9, 0.9));
+    expect(a).not.toEqual(b);
+  });
+
+  it('still mentions every bottle', () => {
+    const prompt = buildPrompt(bottles, [], seq(0.3));
+    bottles.forEach((b) => expect(prompt).toContain('- ' + b.name + ':'));
   });
 });
