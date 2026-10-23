@@ -89,9 +89,17 @@ function validateRecipe(recipe, bottlesByName) {
 
 // bottles: array from bottles_config.json. Returns a Promise resolving to
 // {friendlyname, ingredients: [{name, serving}]} or rejecting with an Error.
-function generateDrink(bottles) {
+function generateDrink(allBottles) {
   if (!ANTHROPIC_API_KEY) {
     return Promise.reject(new Error('ANTHROPIC_API_KEY not set'));
+  }
+
+  // "empty" is the placeholder for an unused slot, and a dry bottle can't pour.
+  var bottles = allBottles.filter(function (b) {
+    return String(b.name).toLowerCase() !== 'empty' && Number(b.capacity) > 0;
+  });
+  if (bottles.length < 2) {
+    return Promise.reject(new Error('Need at least two loaded bottles'));
   }
 
   var bottlesByName = {};

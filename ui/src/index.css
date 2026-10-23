@@ -119,8 +119,21 @@ button {
 }
 
 /* AI generate button */
-.ai-generate {
+.home__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 20px;
+  align-items: flex-start;
+}
+
+.ai-generate {
+  margin-bottom: 0;
+}
+
+.ai-generate__error {
+  color: var(--danger);
+  margin-top: 8px;
 }
 
 /* Recipes */

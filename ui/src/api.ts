@@ -48,6 +48,34 @@ export function pourByName(drinkName: string): Promise<PourResult> {
   return postJson('/drinkme', {drink: drinkName});
 }
 
+export function pourAdHoc(recipe: Recipe): Promise<PourResult> {
+  return postJson('/drinkme', {recipe});
+}
+
+export function generateAiDrink(): Promise<Recipe> {
+  return fetch(API_BASE + '/api/generate-drink', {method: 'POST'}).then(async (response) => {
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || 'Failed to generate a drink');
+    }
+    return body as Recipe;
+  });
+}
+
+export function saveRecipe(name: string, recipe: Recipe): Promise<{id: string; friendlyname: string}> {
+  return fetch(API_BASE + '/api/save-recipe', {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify({name, recipe}),
+  }).then(async (response) => {
+    const body = await response.json();
+    if (!response.ok) {
+      throw new Error(body.error || 'Failed to save recipe');
+    }
+    return body;
+  });
+}
+
 export function getVersion(): Promise<{version: string}> {
   return fetch(API_BASE + '/api/version').then((r) => r.json());
 }

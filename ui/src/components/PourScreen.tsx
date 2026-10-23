@@ -1,17 +1,18 @@
 import {useEffect, useRef, useState} from 'react';
 import type {Bottle, Recipe} from '../types';
 import {drinkImages, fallbackDrinkImage} from '../images';
-import {pourByName} from '../api';
+import {pourAdHoc, pourByName} from '../api';
 
 interface Props {
   recipe: Recipe;
   bottles: Bottle[];
   servos: boolean[];
+  isAiDrink: boolean;
   onCancel: () => void;
   onPoured: (recipe: Recipe) => void;
 }
 
-export function PourScreen({recipe, bottles, servos, onCancel, onPoured}: Props) {
+export function PourScreen({recipe, bottles, servos, isAiDrink, onCancel, onPoured}: Props) {
   const [serving, setServing] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [error, setError] = useState('');
@@ -30,7 +31,7 @@ export function PourScreen({recipe, bottles, servos, onCancel, onPoured}: Props)
   async function serve() {
     setError('');
     try {
-      const result = await pourByName(recipe.name || recipe.friendlyname);
+      const result = isAiDrink ? await pourAdHoc(recipe) : await pourByName(recipe.name || recipe.friendlyname);
 
       if (!result.success) {
         setError(result.error || 'Pouring failed');

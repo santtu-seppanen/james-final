@@ -46,15 +46,18 @@
    and polled by `server/reporter.js` (cron, ~1/min) out to the public
    dashboard — see below.
 
-### Surprise me
+### AI-generated drinks
 
-The "✨ Surprise me" button picks a random drink from the recipes currently
-on the menu (i.e. the ones the loaded bottles can make) and opens its pour
-screen, same as tapping that recipe. Purely client-side.
-
-`server/ai.js` and `POST /api/generate-drink` / `/api/save-recipe` (a Claude
-generated, validated cocktail, saved to the menu after pouring) are still in
-the backend but no longer used by the UI.
+The "✨ Surprise me" button just picks a random drink from the current menu
+(client-side, no AI). The "🤖 AI drink" button next to it calls `POST /api/generate-drink`
+(`server/ai.js`), which asks Claude (Anthropic API, called directly over
+HTTPS — not the official SDK, since the Pi's server runtime predates it,
+see below) for a cocktail using only the bottles currently loaded, in
+multiples of each bottle's own pour size. The response is validated
+server-side (`validateRecipe`, unit-tested in `server/ai.test.js`) before
+it's handed back, and again when it's actually poured — an AI recipe is
+never trusted blindly. After pouring, the UI prompts for a name and
+`POST /api/save-recipe` adds it to the permanent menu.
 
 ### Live-state vs. code
 
