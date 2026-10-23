@@ -5,12 +5,20 @@ var io = require("socket.io")(http);
 var cors = require("cors");
 var fs = require("fs");
 var exec = require("child_process").exec;
-const recipesConfig = "./recipes_config.json";
+var aiModule = require("./ai");
+var path = require("path");
+// Live, mutable state (bottle levels, saved recipes, usage metrics) lives
+// outside the git-tracked directory when JAMES_DATA_DIR is set, so that
+// auto-deploy's `git pull` can never clobber it - only servos_config.json
+// (static GPIO pin mapping, never written at runtime) stays with the code.
+// Unset (local dev), everything just lives next to index.js as before.
+const DATA_DIR = process.env.JAMES_DATA_DIR || ".";
+const recipesConfig = path.join(DATA_DIR, "recipes_config.json");
 const servos = require("./servos_config.json");
-const metricsPath = "./metrics.json";
+const metricsPath = path.join(DATA_DIR, "metrics.json");
 const pourTimeoutMs = 8000;
-const bottlesConfig = "./bottles_config.json";
-const availableBottlesConfig = "./available_bottles_config.json";
+const bottlesConfig = path.join(DATA_DIR, "bottles_config.json");
+const availableBottlesConfig = path.join(DATA_DIR, "available_bottles_config.json");
 const { networkInterfaces } = require("os");
 const nets = networkInterfaces();
 var bottles = [];
@@ -24,6 +32,23 @@ const socketName = "servoState";
 // schedule instead of needing a live inbound connection, and the Alexa
 // integration was already disabled (see the commented-out @reboot line in
 // crontab).
+
+// First run against a fresh DATA_DIR (e.g. right after migrating to it):
+// seed the four live-state files from the committed snapshot next to this
+// file, so there's something valid to read/write instead of crashing.
+[
+  [bottlesConfig, "./bottles_config.json"],
+  [recipesConfig, "./recipes_config.json"],
+  [availableBottlesConfig, "./available_bottles_config.json"],
+  [metricsPath, "./metrics.json"],
+].forEach(([liveePath, seedPath]) => {
+  if (liveePath !== seedPath && !fs.existsSync(liveePath)) {
+    console.log("Seeding " + liveePath + " from " + seedPath);
+    fs.mkdirSync(path.dirname(liveePath), { recursive: true });
+    fs.copyFileSync(seedPath, liveePath);
+  }
+});
+
 const gauges = [];
 let metricsData = JSON.parse(fs.readFileSync(metricsPath));
 let drinksServed = 0;
@@ -38,6 +63,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/index.html");
+});
+
+// scripts/deploy.sh writes VERSION (the deployed commit SHA) right after a
+// successful pull+build. The UI polls this and prompts a reload when it
+// changes, since a backend restart won't otherwise be visible to an
+// already-open kiosk page.
+app.get("/api/version", (req, res) => {
+  let version = "unknown";
+  try {
+    version = fs.readFileSync(path.join(__dirname, "VERSION"), "utf8").trim();
+  } catch (e) {
+    // No VERSION file (e.g. local dev, not deployed via the script) - fine.
+  }
+  res.json({ version });
 });
 
 app.get("/getBottles", (req, res) => {
@@ -118,7 +157,26 @@ app.post("/setRecipes", (req, res) => {
 
 app.post("/drinkme", (req, res) => {
   console.log(req.body);
-  const totalPourTime = pourDrink(req.body.drink);
+
+  let recipe;
+  if (req.body.recipe) {
+    // Ad-hoc recipe (e.g. an AI-generated one the user hasn't saved yet) -
+    // validate it server-side rather than trusting the client blindly.
+    const bottlesByName = {};
+    bottles.forEach((b) => {
+      bottlesByName[String(b.name).toUpperCase()] = b;
+    });
+    const validationError = aiModule.validateRecipe(req.body.recipe, bottlesByName);
+    if (validationError) {
+      return res.status(400).json(JSON.stringify({ success: false, error: validationError }));
+    }
+    recipe = req.body.recipe;
+  } else {
+    const recipes = JSON.parse(fs.readFileSync(recipesConfig));
+    recipe = recipes[req.body.drink];
+  }
+
+  const totalPourTime = pourDrink(recipe);
   if (totalPourTime == 0) {
     res.json(JSON.stringify({ success: false, pourTime: totalPourTime }));
   } else {
@@ -126,12 +184,39 @@ app.post("/drinkme", (req, res) => {
   }
 });
 
-function pourDrink(drinkName) {
-  toggleLed(1);
-  var servoState = [false, false, false, false, false, false, false, false];
+app.post("/api/generate-drink", (req, res) => {
+  aiModule
+    .generateDrink(bottles)
+    .then((recipe) => {
+      res.json(recipe);
+    })
+    .catch((err) => {
+      console.log("AI generate-drink failed:", err.message);
+      res.status(502).json({ error: err.message });
+    });
+});
+
+app.post("/api/save-recipe", (req, res) => {
+  const { name, recipe } = req.body;
+  if (!name || !recipe || !Array.isArray(recipe.ingredients)) {
+    return res.status(400).json({ error: "name and recipe.ingredients are required" });
+  }
 
   const recipes = JSON.parse(fs.readFileSync(recipesConfig));
-  const recipe = recipes[drinkName];
+  const id = String(Date.now());
+  recipes[id] = {
+    friendlyname: name,
+    ingredients: recipe.ingredients,
+    imageUrl: recipe.imageUrl || "humppaleka",
+  };
+  fs.writeFileSync(recipesConfig, JSON.stringify(recipes));
+
+  res.json({ id, friendlyname: name });
+});
+
+function pourDrink(recipe) {
+  toggleLed(1);
+  var servoState = [false, false, false, false, false, false, false, false];
   let totalPourCount = 1;
   if (recipe) {
     console.log(recipe);

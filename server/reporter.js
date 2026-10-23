@@ -4,7 +4,7 @@
 // servo-control process is mid-restart, and so a reporting bug can't take
 // down drink pouring.
 //
-// Crontab: */1 * * * * node /home/pi/socket-server-james/reporter.js
+// Run on a cron, e.g.: */1 * * * * node /home/pi/james-final/server/reporter.js
 //
 // Needs JAMES_DASHBOARD_URL and JAMES_REPORT_TOKEN in .env (see .env.example).
 //
@@ -20,9 +20,13 @@ require('dotenv').config({path: path.join(__dirname, '.env')});
 var DASHBOARD_URL = process.env.JAMES_DASHBOARD_URL;
 var REPORT_TOKEN = process.env.JAMES_REPORT_TOKEN;
 
-var bottlesConfig = path.join(__dirname, 'bottles_config.json');
-var recipesConfig = path.join(__dirname, 'recipes_config.json');
-var metricsPath = path.join(__dirname, 'metrics.json');
+// Same JAMES_DATA_DIR as index.js (see its comment near the top) - this
+// has to read the real live files, not whatever stale snapshot sits next
+// to it in the git checkout.
+var DATA_DIR = process.env.JAMES_DATA_DIR || __dirname;
+var bottlesConfig = path.join(DATA_DIR, 'bottles_config.json');
+var recipesConfig = path.join(DATA_DIR, 'recipes_config.json');
+var metricsPath = path.join(DATA_DIR, 'metrics.json');
 
 function readJson(file, fallback) {
   try {

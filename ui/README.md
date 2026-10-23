@@ -1,69 +1,32 @@
-# This repository was initiated with create-react-native-web-app
+# React + TypeScript + Vite
 
-[![NPM](https://nodei.co/npm/create-react-native-web-app.png)](https://npmjs.org/package/create-react-native-web-app)
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-![GitHub issues](https://img.shields.io/github/issues/orYoffe/create-react-native-web-app.svg)
-![license](https://img.shields.io/github/license/orYoffe/create-react-native-web-app.svg)
-![GitHub top language](https://img.shields.io/github/languages/top/orYoffe/create-react-native-web-app.svg)
-![npm bundle size (minified)](https://img.shields.io/bundlephobia/min/create-react-native-web-app.svg)
-![npm](https://img.shields.io/npm/v/create-react-native-web-app.svg)
+Currently, two official plugins are available:
 
-### A simple CLI tool to start your React Native Web project to develop same app for IOS Android and Web
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-<p align="center" >
-<img width="300"  src="https://raw.githubusercontent.com/orYoffe/create-react-native-web-app/master/template/src/logo.png">
-</p>
+## React Compiler
 
-## Installation
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
-```sh
-# Run create-react-native-web-app <project-directory>
-$ npx create-react-native-web-app myApp
+## Expanding the Oxlint configuration
 
-# if you previously installed this package globaly run this command first to uninstall the previous version:
-# npm uninstall -g create-react-native-web-app
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
 
-# cd into your <project-directory>
-$ cd myApp
-
-# Run Web/Ios/Android development
-# Web
-$ npm run web
-
-# IOS (simulator)
-$ npm run ios
-
-# Android (connected device)
-$ npm run android
-
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
 ```
 
-- To work with IOS and Android - Install Xcode and Android studio and follow the react native instructions [under the "Building Projects with Native Code" tab](http://facebook.github.io/react-native/docs/getting-started.html)
-
-<p align="center" >
-<img width="1000"  src="https://raw.githubusercontent.com/orYoffe/create-react-native-web-app/master/cli_preview.png">
-</p>
-
-## Folder structure
-
-```
-myApp
-├── android (When opening with Android studio, open this folder)
-│   └── android project files
-├── ios (When opening with Xcode, open this folder)
-│   └── ios project files
-├── public
-│   ├── favicon.ico
-│   ├── index.html
-│   └── manifest.json
-└── src
-    └── project code
-```
-
-## Resources
-
-- [React Native for Web (react-native-web)](https://github.com/necolas/react-native-web)
-- [React](https://reactjs.org/)
-- [React Native](http://facebook.github.io/react-native/)
-- [Create React App](https://github.com/facebook/create-react-app)
-- [Create React Native App](https://github.com/react-community/create-react-native-app)
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
