@@ -8,7 +8,7 @@ pages_build_output_dir = "public"
 [[d1_databases]]
 binding = "DB"
 database_name = "james-dashboard"
-database_id = "REPLACE_WITH_REAL_DATABASE_ID"
+database_id = "0aeba638-96cd-464f-b427-266a6e549f9f"
 
 # REPORT_TOKEN is a secret, not set here. Set it with:
 #   wrangler pages secret put REPORT_TOKEN
