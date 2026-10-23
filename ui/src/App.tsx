@@ -2,12 +2,11 @@ import {useEffect, useRef, useState} from 'react';
 import io, {type Socket} from 'socket.io-client';
 // Socket's shape comes from src/socketio-client.d.ts.
 import type {Bottle, Recipe, ServoStateEvent} from './types';
-import {API_BASE, getBottles, getRecipes, saveRecipe} from './api';
+import {API_BASE, getBottles, getRecipes} from './api';
 import {BottleList} from './components/BottleList';
 import {RecipeGrid} from './components/RecipeGrid';
 import {PourScreen} from './components/PourScreen';
-import {AiGenerateButton} from './components/AiGenerateButton';
-import {SaveDrinkModal} from './components/SaveDrinkModal';
+import {SurpriseButton} from './components/SurpriseButton';
 import {InfoToast} from './components/InfoToast';
 import {BottleAdmin} from './components/BottleAdmin';
 import {RecipeAdmin} from './components/RecipeAdmin';
@@ -21,8 +20,6 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [servos, setServos] = useState<boolean[]>(new Array(8).fill(false));
   const [selectedDrink, setSelectedDrink] = useState<Recipe | null>(null);
-  const [isAiDrink, setIsAiDrink] = useState(false);
-  const [pendingSave, setPendingSave] = useState<Recipe | null>(null);
   const [toast, setToast] = useState('');
   const socketRef = useRef<Socket | null>(null);
 
@@ -51,13 +48,6 @@ export default function App() {
 
   function selectRecipe(recipe: Recipe) {
     setSelectedDrink(recipe);
-    setIsAiDrink(false);
-    setView('pour');
-  }
-
-  function generateAiDrink(recipe: Recipe) {
-    setSelectedDrink(recipe);
-    setIsAiDrink(true);
     setView('pour');
   }
 
@@ -75,25 +65,6 @@ export default function App() {
       showToast(`Drink poured, add ${parts.join(', ')} and enjoy`);
     }
 
-    if (isAiDrink) {
-      setPendingSave(recipe);
-    } else {
-      setSelectedDrink(null);
-      setView('home');
-    }
-  }
-
-  async function handleSaveDrink(name: string) {
-    if (!pendingSave) return;
-    const result = await saveRecipe(name, pendingSave);
-    setRecipes((prev) => [...prev, {...pendingSave, name: result.id, friendlyname: result.friendlyname}]);
-    setPendingSave(null);
-    setSelectedDrink(null);
-    setView('home');
-  }
-
-  function skipSaveDrink() {
-    setPendingSave(null);
     setSelectedDrink(null);
     setView('home');
   }
@@ -113,17 +84,9 @@ export default function App() {
           recipe={selectedDrink}
           bottles={bottles}
           servos={servos}
-          isAiDrink={isAiDrink}
           onCancel={cancelPour}
           onPoured={drinkPoured}
         />
-        {pendingSave && (
-          <SaveDrinkModal
-            defaultName={pendingSave.friendlyname}
-            onSave={handleSaveDrink}
-            onSkip={skipSaveDrink}
-          />
-        )}
         <InfoToast message={toast} />
       </>
     );
@@ -136,7 +99,7 @@ export default function App() {
         <BottleList bottles={bottles} />
       </aside>
       <main className="home__main">
-        <AiGenerateButton onGenerated={generateAiDrink} />
+        <SurpriseButton recipes={recipes} onPick={selectRecipe} />
         <RecipeGrid recipes={recipes} onSelect={selectRecipe} />
         <div className="home__admin-links">
           <button className="icon-button" onClick={() => setView('recipeAdmin')} title="Recipes admin">

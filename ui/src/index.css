@@ -123,11 +123,6 @@ button {
   margin-bottom: 20px;
 }
 
-.ai-generate__error {
-  color: var(--danger);
-  margin-top: 8px;
-}
-
 /* Recipes */
 .recipe-grid {
   display: grid;
