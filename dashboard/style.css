@@ -376,3 +376,9 @@ body {
   align-items: center;
   gap: 12px;
 }
+
+.saving-tag {
+  color: var(--status-warning);
+  font-size: 12px;
+  font-weight: 400;
+}

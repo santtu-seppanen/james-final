@@ -5,6 +5,14 @@
   var LOW_FILL_THRESHOLD = 0.2; // 20% remaining or less is shown as "low"
 
   var state = {bottles: [], recipes: [], availableBottles: []};
+  // Bottle edits that were saved but haven't come back from the Pi yet
+  // (it applies them on its next check-in, up to ~1 min later), keyed by
+  // slot. Shown right away, marked "saving", until the server data catches up.
+  var pendingBottles = {};
+  var PENDING_TTL_MS = 3 * 60 * 1000;
+  var FAST_POLL_MS = 10000;
+  var SLOW_POLL_MS = 30000;
+  var pollTimer = null;
   var adminToken = readToken();
   var editMode = false;
 
@@ -75,7 +83,8 @@
       var li = document.createElement('li');
       li.className = 'bottle-row';
       li.innerHTML =
-        '<span class="bottle-row__name">' + escapeHtml(bottle.name) + '</span>' +
+        '<span class="bottle-row__name">' + escapeHtml(bottle.name) +
+        (bottle.saving ? ' <span class="saving-tag">saving…</span>' : '') + '</span>' +
         '<span class="bottle-row__track"><span class="bottle-row__fill' +
         (isLow ? ' bottle-row__fill--low' : '') +
         '" style="width:' + percent.toFixed(0) + '%"></span></span>' +
@@ -144,6 +153,34 @@
     return div.innerHTML;
   }
 
+  function mergePending(bottles) {
+    return bottles.map(function (bottle) {
+      var pending = pendingBottles[bottle.slot];
+      if (!pending) return bottle;
+      var caughtUp =
+        bottle.name === pending.name && bottle.capacityMl === pending.capacityMl && bottle.servingMl === pending.servingMl;
+      if (caughtUp || Date.now() - pending.savedAt > PENDING_TTL_MS) {
+        delete pendingBottles[bottle.slot];
+        return bottle;
+      }
+      return Object.assign({}, bottle, {
+        name: pending.name,
+        capacityMl: pending.capacityMl,
+        originalCapacityMl: bottle.name === pending.name ? bottle.originalCapacityMl : pending.capacityMl,
+        servingMl: pending.servingMl,
+        saving: true,
+      });
+    });
+  }
+
+  function schedulePoll() {
+    clearTimeout(pollTimer);
+    var fast = Object.keys(pendingBottles).length > 0;
+    pollTimer = setTimeout(function () {
+      loadDashboard();
+    }, fast ? FAST_POLL_MS : SLOW_POLL_MS);
+  }
+
   function loadDashboard() {
     fetch(API_BASE + '/api/dashboard')
       .then(function (response) {
@@ -153,7 +190,7 @@
         return response.json();
       })
       .then(function (data) {
-        state.bottles = data.bottles;
+        state.bottles = mergePending(data.bottles);
         state.recipes = data.recipes;
         state.availableBottles = data.availableBottles || [];
         renderStatus(data.status);
@@ -164,7 +201,8 @@
       .catch(function (err) {
         document.getElementById('status-text').textContent = 'Could not reach backend';
         console.error('Failed to load dashboard data', err);
-      });
+      })
+      .then(schedulePoll);
   }
 
   // --- Recipe editing (needs the admin token; edits are queued for the Pi) ---
@@ -339,17 +377,22 @@
   function submitBottleDialog(event) {
     event.preventDefault();
     var err = document.getElementById('bottle-error');
+    var edit = {
+      name: document.getElementById('bottle-name').value,
+      capacityMl: Number(document.getElementById('bottle-capacity').value),
+      servingMl: Number(document.getElementById('bottle-serving').value),
+    };
     sendAdmin('/api/admin/bottles', {
       slot: editingSlot,
-      bottle: {
-        name: document.getElementById('bottle-name').value,
-        capacity: Number(document.getElementById('bottle-capacity').value),
-        serving: Number(document.getElementById('bottle-serving').value),
-      },
+      bottle: {name: edit.name, capacity: edit.capacityMl, serving: edit.servingMl},
     })
       .then(function () {
+        pendingBottles[editingSlot] = Object.assign(edit, {savedAt: Date.now()});
+        state.bottles = mergePending(state.bottles);
+        renderBottles(state.bottles);
         bottleDialog.close();
         showNotice('Saved - the bot applies it within about a minute.', false);
+        schedulePoll();
       })
       .catch(function (e) {
         err.textContent = e.message;
@@ -375,5 +418,4 @@
   document.getElementById('recipe-form').addEventListener('submit', submitDialog);
 
   loadDashboard();
-  setInterval(loadDashboard, 30000);
 })();
