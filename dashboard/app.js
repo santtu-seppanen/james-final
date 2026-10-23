@@ -4,6 +4,28 @@
   var API_BASE = window.JAMES_API_BASE;
   var LOW_FILL_THRESHOLD = 0.2; // 20% remaining or less is shown as "low"
 
+  var state = {bottles: [], recipes: []};
+  var adminToken = readToken();
+  var editMode = false;
+
+  function readToken() {
+    try {
+      return sessionStorage.getItem('jamesAdminToken') || '';
+    } catch (e) {
+      return '';
+    }
+  }
+
+  function storeToken(token) {
+    adminToken = token;
+    try {
+      if (token) sessionStorage.setItem('jamesAdminToken', token);
+      else sessionStorage.removeItem('jamesAdminToken');
+    } catch (e) {
+      // sessionStorage unavailable; the token just lasts until reload
+    }
+  }
+
   function formatMl(ml) {
     if (ml >= 1000) {
       return (ml / 1000).toFixed(1) + ' L';
@@ -82,6 +104,13 @@
       card.innerHTML =
         '<div class="recipe-card__name">' + escapeHtml(recipe.friendlyName) + '</div>' +
         '<ul class="recipe-card__ingredients">' + ingredientItems + '</ul>';
+      if (editMode) {
+        var actions = document.createElement('div');
+        actions.className = 'recipe-card__actions';
+        actions.appendChild(makeButton('Edit', function () { openDialog(recipe); }));
+        actions.appendChild(makeButton('Delete', function () { deleteRecipe(recipe); }));
+        card.appendChild(actions);
+      }
       grid.appendChild(card);
     });
   }
@@ -120,6 +149,8 @@
         return response.json();
       })
       .then(function (data) {
+        state.bottles = data.bottles;
+        state.recipes = data.recipes;
         renderStatus(data.status);
         renderBottles(data.bottles);
         renderRecipes(data.recipes);
@@ -130,6 +161,157 @@
         console.error('Failed to load dashboard data', err);
       });
   }
+
+  // --- Recipe editing (needs the admin token; edits are queued for the Pi) ---
+
+  var dialog = document.getElementById('recipe-dialog');
+  var editingRecipeId = null;
+
+  function makeButton(label, onClick) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn--ghost btn--small';
+    b.textContent = label;
+    b.addEventListener('click', onClick);
+    return b;
+  }
+
+  function showNotice(message, isError) {
+    var el = document.getElementById('edit-notice');
+    el.textContent = message;
+    el.className = 'notice' + (isError ? ' notice--error' : '');
+    el.hidden = !message;
+  }
+
+  function sendCommand(command) {
+    return fetch(API_BASE + '/api/admin/recipes', {
+      method: 'POST',
+      headers: {'content-type': 'application/json', authorization: 'Bearer ' + adminToken},
+      body: JSON.stringify(command),
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (body) {
+        if (response.status === 401) {
+          storeToken('');
+          setEditMode(false);
+          throw new Error('Wrong admin token.');
+        }
+        if (!response.ok) throw new Error(body.error || 'HTTP ' + response.status);
+        return body;
+      });
+    });
+  }
+
+  function setEditMode(on) {
+    editMode = on;
+    document.getElementById('edit-toggle').textContent = on ? 'Done' : 'Edit';
+    document.getElementById('add-recipe').hidden = !on;
+    showNotice(on ? 'Changes reach the bot within about a minute.' : '', false);
+    renderRecipes(state.recipes);
+  }
+
+  function deleteRecipe(recipe) {
+    if (!confirm('Delete "' + recipe.friendlyName + '"?')) return;
+    sendCommand({op: 'delete', recipeId: recipe.id})
+      .then(function () { showNotice('Delete queued - the bot applies it within about a minute.', false); })
+      .catch(function (e) { showNotice(e.message, true); });
+  }
+
+  function addIngredientRow(ingredient) {
+    var row = document.createElement('div');
+    row.className = 'ingredient-row';
+
+    var select = document.createElement('select');
+    select.required = true;
+    state.bottles.forEach(function (bottle) {
+      var option = document.createElement('option');
+      option.value = bottle.name;
+      option.textContent = bottle.name + ' (' + bottle.servingMl + ' ml steps)';
+      option.dataset.step = bottle.servingMl;
+      select.appendChild(option);
+    });
+    if (ingredient) select.value = ingredient.name;
+
+    var amount = document.createElement('input');
+    amount.type = 'number';
+    amount.min = 1;
+    amount.required = true;
+    amount.value = ingredient ? ingredient.serving : '';
+    amount.placeholder = 'ml';
+
+    var remove = makeButton('✕', function () { row.remove(); });
+    remove.setAttribute('aria-label', 'Remove ingredient');
+
+    row.appendChild(select);
+    row.appendChild(amount);
+    row.appendChild(remove);
+    document.getElementById('ingredient-rows').appendChild(row);
+  }
+
+  function openDialog(recipe) {
+    editingRecipeId = recipe ? recipe.id : null;
+    document.getElementById('dialog-title').textContent = recipe ? 'Edit drink' : 'Add drink';
+    document.getElementById('recipe-name').value = recipe ? recipe.friendlyName : '';
+    document.getElementById('ingredient-rows').innerHTML = '';
+    var existing = recipe ? recipe.ingredients || [] : [];
+    // Ingredients for bottles that are no longer loaded can't be poured; drop them.
+    existing.filter(function (i) {
+      return state.bottles.some(function (b) { return b.name.toUpperCase() === String(i.name).toUpperCase(); });
+    }).forEach(function (i) {
+      var bottle = state.bottles.filter(function (b) { return b.name.toUpperCase() === String(i.name).toUpperCase(); })[0];
+      addIngredientRow({name: bottle.name, serving: i.serving});
+    });
+    if (!document.getElementById('ingredient-rows').children.length) addIngredientRow();
+    var err = document.getElementById('dialog-error');
+    err.hidden = true;
+    dialog.showModal();
+  }
+
+  function submitDialog(event) {
+    event.preventDefault();
+    var err = document.getElementById('dialog-error');
+    var ingredients = [];
+    var problem = '';
+    Array.prototype.forEach.call(document.querySelectorAll('.ingredient-row'), function (row) {
+      var select = row.querySelector('select');
+      var serving = Number(row.querySelector('input').value);
+      var step = Number(select.selectedOptions[0].dataset.step);
+      if (!serving || serving % step !== 0) problem = select.value + ': amount must be a multiple of ' + step + ' ml';
+      ingredients.push({name: select.value, serving: serving});
+    });
+    if (problem) {
+      err.textContent = problem;
+      err.hidden = false;
+      return;
+    }
+
+    sendCommand({
+      op: 'upsert',
+      recipeId: editingRecipeId,
+      recipe: {friendlyname: document.getElementById('recipe-name').value.trim(), ingredients: ingredients},
+    })
+      .then(function () {
+        dialog.close();
+        showNotice('Saved - the bot applies it within about a minute.', false);
+      })
+      .catch(function (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+      });
+  }
+
+  document.getElementById('edit-toggle').addEventListener('click', function () {
+    if (editMode) return setEditMode(false);
+    if (!adminToken) {
+      var token = window.prompt('Admin token');
+      if (!token) return;
+      storeToken(token.trim());
+    }
+    setEditMode(true);
+  });
+  document.getElementById('add-recipe').addEventListener('click', function () { openDialog(null); });
+  document.getElementById('add-ingredient').addEventListener('click', function () { addIngredientRow(); });
+  document.getElementById('dialog-cancel').addEventListener('click', function () { dialog.close(); });
+  document.getElementById('recipe-form').addEventListener('submit', submitDialog);
 
   loadDashboard();
   setInterval(loadDashboard, 30000);

@@ -19,10 +19,20 @@ wrangler d1 migrations apply james-dashboard --remote
 # create the Pages project (first deploy), then set the write secret:
 wrangler pages project create james-dashboard
 wrangler pages secret put REPORT_TOKEN   # pick a long random value
+wrangler pages secret put ADMIN_TOKEN    # the password typed into the dashboard's "Edit" button
 ```
 
 Put the same `REPORT_TOKEN` value into the Pi's `server/.env` as
 `JAMES_REPORT_TOKEN` (see `server/.env.example` and `server/reporter.js`).
+
+## Editing recipes from the dashboard
+
+`POST /api/admin/recipes` (bearer `ADMIN_TOKEN`) queues an add/edit/delete in
+the `recipe_commands` table. The Pi can't be reached from the internet, so
+`server/reporter.js` (every minute) fetches pending commands from
+`GET /api/commands`, validates and applies them to `recipes_config.json`
+(`server/remote-recipes.js`), and acks via `POST /api/commands` (bearer
+`REPORT_TOKEN`). Edits therefore show up after the next check-in (~1 min).
 
 ## Deploys
 

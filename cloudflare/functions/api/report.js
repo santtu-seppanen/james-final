@@ -78,6 +78,15 @@ export async function onRequestPost(context) {
     );
   }
 
+  // The Pi's recipe list is the source of truth: anything it no longer
+  // reports (deleted on the kiosk or via the dashboard) goes away here too.
+  // Every reported recipe was just stamped with `now`, so older rows are stale.
+  // An empty list is skipped: it's what the Pi sends when it couldn't read
+  // its recipes file, and that shouldn't wipe the dashboard.
+  if (Array.isArray(payload.recipes) && payload.recipes.length > 0) {
+    statements.push(db.prepare('DELETE FROM recipes WHERE updated_at < ?').bind(now));
+  }
+
   if (payload.pour) {
     statements.push(
       db

@@ -15,6 +15,7 @@
 var fs = require('fs');
 var path = require('path');
 var fetch = require('node-fetch');
+var remoteRecipes = require('./remote-recipes');
 require('dotenv').config({path: path.join(__dirname, '.env')});
 
 var DASHBOARD_URL = process.env.JAMES_DASHBOARD_URL;
@@ -87,22 +88,65 @@ function buildPayload() {
   };
 }
 
+// Pulls recipe edits queued from the public dashboard, applies them to
+// recipes_config.json and acks the outcome. Runs before buildPayload() so
+// the report that follows already reflects the new recipes.
+function applyRemoteCommands() {
+  var headers = {authorization: 'Bearer ' + REPORT_TOKEN, 'content-type': 'application/json'};
+
+  return fetch(DASHBOARD_URL + '/api/commands', {headers: headers})
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('HTTP ' + response.status);
+      }
+      return response.json();
+    })
+    .then(function (body) {
+      var commands = body.commands || [];
+      if (commands.length === 0) {
+        return null;
+      }
+
+      var recipes = readJson(recipesConfig, null);
+      var bottles = readJson(bottlesConfig, null);
+      if (!recipes || !bottles) {
+        return null; // leave them pending, try again next minute
+      }
+
+      var results = remoteRecipes.applyCommands(recipes, bottles, commands);
+      if (results.some(function (r) { return r.ok; })) {
+        fs.writeFileSync(recipesConfig, JSON.stringify(recipes));
+      }
+      console.log('Applied ' + commands.length + ' dashboard recipe command(s)');
+
+      return fetch(DASHBOARD_URL + '/api/commands', {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({results: results}),
+      });
+    })
+    .catch(function (e) {
+      console.error('Recipe commands failed: ' + e.message);
+    });
+}
+
 function report() {
   if (!DASHBOARD_URL || !REPORT_TOKEN) {
     console.error('JAMES_DASHBOARD_URL / JAMES_REPORT_TOKEN not set, skipping report.');
     return Promise.resolve();
   }
 
-  var payload = buildPayload();
-
-  return fetch(DASHBOARD_URL + '/api/report', {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: 'Bearer ' + REPORT_TOKEN,
-    },
-    body: JSON.stringify(payload),
-  })
+  return applyRemoteCommands()
+    .then(function () {
+      return fetch(DASHBOARD_URL + '/api/report', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: 'Bearer ' + REPORT_TOKEN,
+        },
+        body: JSON.stringify(buildPayload()),
+      });
+    })
     .then(function (response) {
       if (!response.ok) {
         return response.text().then(function (text) {
