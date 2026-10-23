@@ -25,12 +25,22 @@ git fetch
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse @{u})
 
+SERVER_MAIN="$REPO_DIR/server/index.js"
+
+is_server_running() {
+  # Match on the absolute path, not just "index.js" - matters once there's
+  # more than one checkout of this repo around (e.g. during a migration).
+  pgrep -f "node $SERVER_MAIN" > /dev/null
+}
+
 restart_server() {
   echo "Restarting backend..."
-  pkill -f "node $REPO_DIR/server/index.js" || true
+  pkill -f "node $SERVER_MAIN" || true
   sleep 1
   cd "$REPO_DIR/server"
-  setsid node index.js > server.log 2>&1 < /dev/null &
+  # Pass the absolute path as node's argument (rather than relying on cwd)
+  # so `ps`/pgrep/pkill all see the same string this function matches on.
+  setsid node "$SERVER_MAIN" > server.log 2>&1 < /dev/null &
   cd "$REPO_DIR"
 }
 
@@ -64,7 +74,7 @@ if [ "$LOCAL" != "$REMOTE" ]; then
   restart_server
 else
   echo "No changes from upstream"
-  if ! pgrep -f "node $REPO_DIR/server/index.js" > /dev/null; then
+  if ! is_server_running; then
     restart_server
   fi
 fi
