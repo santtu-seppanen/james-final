@@ -123,16 +123,6 @@ button {
   margin-bottom: 20px;
 }
 
-.button--ai {
-  background: linear-gradient(135deg, #6a2c91, #1b95e0);
-  color: white;
-  border: none;
-  border-radius: 999px;
-  padding: 16px 28px;
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .ai-generate__error {
   color: var(--danger);
   margin-top: 8px;
@@ -292,6 +282,17 @@ button {
 .button--small {
   padding: 8px 14px;
   font-size: 13px;
+}
+
+/* Must come after .button, which sets the same properties */
+.button--ai {
+  background: linear-gradient(135deg, #6a2c91, #1b95e0);
+  color: white;
+  border: none;
+  border-radius: 999px;
+  padding: 16px 28px;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 /* Modals / toasts */
