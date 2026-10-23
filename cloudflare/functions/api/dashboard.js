@@ -11,11 +11,11 @@ export async function onRequestGet(context) {
   const db = env.DB;
 
   const status = await db
-    .prepare('SELECT online, last_seen, drinks_served, alcohol_served_ml FROM status WHERE id = 1')
+    .prepare('SELECT online, last_seen, drinks_served, alcohol_served_ml, available_bottles_json FROM status WHERE id = 1')
     .first();
 
   const bottles = await db
-    .prepare('SELECT name, capacity_ml, original_capacity_ml, serving_ml, updated_at FROM bottles ORDER BY name')
+    .prepare('SELECT slot, name, capacity_ml, original_capacity_ml, serving_ml, updated_at FROM bottles ORDER BY slot')
     .all();
 
   const recipes = await db
@@ -36,7 +36,9 @@ export async function onRequestGet(context) {
       drinksServed: status?.drinks_served ?? 0,
       alcoholServedMl: status?.alcohol_served_ml ?? 0,
     },
+    availableBottles: status?.available_bottles_json ? JSON.parse(status.available_bottles_json) : [],
     bottles: (bottles.results ?? []).map((b) => ({
+      slot: b.slot,
       name: b.name,
       capacityMl: b.capacity_ml,
       originalCapacityMl: b.original_capacity_ml,

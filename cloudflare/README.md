@@ -25,13 +25,13 @@ wrangler pages secret put ADMIN_TOKEN    # the password typed into the dashboard
 Put the same `REPORT_TOKEN` value into the Pi's `server/.env` as
 `JAMES_REPORT_TOKEN` (see `server/.env.example` and `server/reporter.js`).
 
-## Editing recipes from the dashboard
+## Editing recipes and bottles from the dashboard
 
-`POST /api/admin/recipes` (bearer `ADMIN_TOKEN`) queues an add/edit/delete in
-the `recipe_commands` table. The Pi can't be reached from the internet, so
+`POST /api/admin/recipes` and `POST /api/admin/bottles` (bearer `ADMIN_TOKEN`)
+queue an add/edit/delete in the `recipe_commands` / `bottle_commands` tables. The Pi can't be reached from the internet, so
 `server/reporter.js` (every minute) fetches pending commands from
 `GET /api/commands`, validates and applies them to `recipes_config.json`
-(`server/remote-recipes.js`), and acks via `POST /api/commands` (bearer
+(`server/remote-recipes.js`, `server/remote-bottles.js`), and acks via `POST /api/commands` (bearer
 `REPORT_TOKEN`). Edits therefore show up after the next check-in (~1 min).
 
 ## Deploys

@@ -16,6 +16,7 @@ var fs = require('fs');
 var path = require('path');
 var fetch = require('node-fetch');
 var remoteRecipes = require('./remote-recipes');
+var remoteBottles = require('./remote-bottles');
 require('dotenv').config({path: path.join(__dirname, '.env')});
 
 var DASHBOARD_URL = process.env.JAMES_DASHBOARD_URL;
@@ -27,6 +28,7 @@ var REPORT_TOKEN = process.env.JAMES_REPORT_TOKEN;
 var DATA_DIR = process.env.JAMES_DATA_DIR || __dirname;
 var bottlesConfig = path.join(DATA_DIR, 'bottles_config.json');
 var recipesConfig = path.join(DATA_DIR, 'recipes_config.json');
+var availableBottlesConfig = path.join(DATA_DIR, 'available_bottles_config.json');
 var metricsPath = path.join(DATA_DIR, 'metrics.json');
 
 function readJson(file, fallback) {
@@ -51,6 +53,7 @@ function buildPayload() {
   var bottles = readJson(bottlesConfig, []);
   var recipes = readJson(recipesConfig, {});
   var metrics = readJson(metricsPath, null);
+  var available = readJson(availableBottlesConfig, []);
 
   var summaryItems =
     (metrics &&
@@ -68,8 +71,10 @@ function buildPayload() {
 
   return {
     status: {drinksServed: drinksServed, alcoholServedMl: alcoholServedMl},
-    bottles: bottles.map(function (b) {
+    availableBottles: available,
+    bottles: bottles.map(function (b, slot) {
       return {
+        slot: slot,
         name: b.name,
         capacityMl: Number(b.capacity),
         originalCapacityMl: Number(b.originalCapacity),
@@ -88,8 +93,8 @@ function buildPayload() {
   };
 }
 
-// Pulls recipe edits queued from the public dashboard, applies them to
-// recipes_config.json and acks the outcome. Runs before buildPayload() so
+// Pulls recipe and bottle edits queued from the public dashboard, applies
+// them to recipes_config.json / bottles_config.json and acks the outcome. Runs before buildPayload() so
 // the report that follows already reflects the new recipes.
 function applyRemoteCommands() {
   var headers = {authorization: 'Bearer ' + REPORT_TOKEN, 'content-type': 'application/json'};
@@ -103,30 +108,36 @@ function applyRemoteCommands() {
     })
     .then(function (body) {
       var commands = body.commands || [];
-      if (commands.length === 0) {
+      var bottleCommands = body.bottleCommands || [];
+      if (commands.length === 0 && bottleCommands.length === 0) {
         return null;
       }
 
       var recipes = readJson(recipesConfig, null);
       var bottles = readJson(bottlesConfig, null);
-      if (!recipes || !bottles) {
+      var available = readJson(availableBottlesConfig, null);
+      if (!recipes || !bottles || !available) {
         return null; // leave them pending, try again next minute
       }
 
       var results = remoteRecipes.applyCommands(recipes, bottles, commands);
+      var bottleResults = remoteBottles.applyBottleCommands(bottles, available, bottleCommands);
       if (results.some(function (r) { return r.ok; })) {
         fs.writeFileSync(recipesConfig, JSON.stringify(recipes));
       }
-      console.log('Applied ' + commands.length + ' dashboard recipe command(s)');
+      if (bottleResults.some(function (r) { return r.ok; })) {
+        fs.writeFileSync(bottlesConfig, JSON.stringify(bottles));
+      }
+      console.log('Applied ' + commands.length + ' recipe and ' + bottleCommands.length + ' bottle dashboard command(s)');
 
       return fetch(DASHBOARD_URL + '/api/commands', {
         method: 'POST',
         headers: headers,
-        body: JSON.stringify({results: results}),
+        body: JSON.stringify({results: results, bottleResults: bottleResults}),
       });
     })
     .catch(function (e) {
-      console.error('Recipe commands failed: ' + e.message);
+      console.error('Dashboard commands failed: ' + e.message);
     });
 }
 

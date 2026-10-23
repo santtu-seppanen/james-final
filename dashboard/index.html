@@ -48,6 +48,30 @@
         <div id="recipe-grid" class="recipe-grid"></div>
       </section>
 
+      <dialog id="bottle-dialog" class="dialog">
+        <form id="bottle-form" method="dialog">
+          <h3 id="bottle-dialog-title">Bottle</h3>
+          <label class="field">Bottle
+            <select id="bottle-name" required></select>
+          </label>
+          <label class="field">Capacity (ml)
+            <input type="number" id="bottle-capacity" min="0" max="5000" step="1" required />
+          </label>
+          <label class="field">Pour size
+            <select id="bottle-serving">
+              <option value="25">25 ml</option>
+              <option value="50">50 ml</option>
+            </select>
+          </label>
+          <p class="notice">Changing the capacity counts as a refill. Drinks that use a bottle which is no longer loaded disappear from the kiosk menu.</p>
+          <p id="bottle-error" class="notice notice--error" hidden></p>
+          <div class="dialog__buttons">
+            <button type="button" id="bottle-cancel" class="btn btn--ghost">Cancel</button>
+            <button type="submit" class="btn">Save</button>
+          </div>
+        </form>
+      </dialog>
+
       <dialog id="recipe-dialog" class="dialog">
         <form id="recipe-form" method="dialog">
           <h3 id="dialog-title">Drink</h3>

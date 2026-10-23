@@ -4,7 +4,7 @@
   var API_BASE = window.JAMES_API_BASE;
   var LOW_FILL_THRESHOLD = 0.2; // 20% remaining or less is shown as "low"
 
-  var state = {bottles: [], recipes: []};
+  var state = {bottles: [], recipes: [], availableBottles: []};
   var adminToken = readToken();
   var editMode = false;
 
@@ -80,6 +80,10 @@
         (isLow ? ' bottle-row__fill--low' : '') +
         '" style="width:' + percent.toFixed(0) + '%"></span></span>' +
         '<span class="bottle-row__value">' + formatMl(bottle.capacityMl) + '</span>';
+      if (editMode) {
+        li.className += ' bottle-row--editable';
+        li.appendChild(makeButton('Edit', function () { openBottleDialog(bottle); }));
+      }
       list.appendChild(li);
     });
   }
@@ -151,6 +155,7 @@
       .then(function (data) {
         state.bottles = data.bottles;
         state.recipes = data.recipes;
+        state.availableBottles = data.availableBottles || [];
         renderStatus(data.status);
         renderBottles(data.bottles);
         renderRecipes(data.recipes);
@@ -184,7 +189,11 @@
   }
 
   function sendCommand(command) {
-    return fetch(API_BASE + '/api/admin/recipes', {
+    return sendAdmin('/api/admin/recipes', command);
+  }
+
+  function sendAdmin(path, command) {
+    return fetch(API_BASE + path, {
       method: 'POST',
       headers: {'content-type': 'application/json', authorization: 'Bearer ' + adminToken},
       body: JSON.stringify(command),
@@ -207,6 +216,7 @@
     document.getElementById('add-recipe').hidden = !on;
     showNotice(on ? 'Changes reach the bot within about a minute.' : '', false);
     renderRecipes(state.recipes);
+    renderBottles(state.bottles);
   }
 
   function deleteRecipe(recipe) {
@@ -298,6 +308,57 @@
         err.hidden = false;
       });
   }
+
+  // --- Bottle editing ---
+
+  var bottleDialog = document.getElementById('bottle-dialog');
+  var editingSlot = null;
+
+  function openBottleDialog(bottle) {
+    editingSlot = bottle.slot;
+    document.getElementById('bottle-dialog-title').textContent = 'Slot ' + (bottle.slot + 1);
+
+    var select = document.getElementById('bottle-name');
+    select.innerHTML = '';
+    var names = state.availableBottles.slice();
+    if (names.indexOf(bottle.name) === -1) names.unshift(bottle.name);
+    names.forEach(function (name) {
+      var option = document.createElement('option');
+      option.value = name;
+      option.textContent = name;
+      select.appendChild(option);
+    });
+    select.value = bottle.name;
+
+    document.getElementById('bottle-capacity').value = bottle.capacityMl;
+    document.getElementById('bottle-serving').value = String(bottle.servingMl);
+    document.getElementById('bottle-error').hidden = true;
+    bottleDialog.showModal();
+  }
+
+  function submitBottleDialog(event) {
+    event.preventDefault();
+    var err = document.getElementById('bottle-error');
+    sendAdmin('/api/admin/bottles', {
+      slot: editingSlot,
+      bottle: {
+        name: document.getElementById('bottle-name').value,
+        capacity: Number(document.getElementById('bottle-capacity').value),
+        serving: Number(document.getElementById('bottle-serving').value),
+      },
+    })
+      .then(function () {
+        bottleDialog.close();
+        showNotice('Saved - the bot applies it within about a minute.', false);
+      })
+      .catch(function (e) {
+        err.textContent = e.message;
+        err.hidden = false;
+      });
+  }
+
+  document.getElementById('bottle-cancel').addEventListener('click', function () { bottleDialog.close(); });
+  document.getElementById('bottle-form').addEventListener('submit', submitBottleDialog);
 
   document.getElementById('edit-toggle').addEventListener('click', function () {
     if (editMode) return setEditMode(false);

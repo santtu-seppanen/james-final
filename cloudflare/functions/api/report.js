@@ -46,19 +46,33 @@ export async function onRequestPost(context) {
       .bind(now, payload.status?.drinksServed ?? 0, payload.status?.alcoholServedMl ?? 0),
   );
 
-  for (const bottle of payload.bottles ?? []) {
+  // Bottles are keyed by slot (the Pi's array index / servo number). Older
+  // reporters don't send one, so fall back to the position in the list.
+  (payload.bottles ?? []).forEach((bottle, index) => {
     statements.push(
       db
         .prepare(
-          `INSERT INTO bottles (name, capacity_ml, original_capacity_ml, serving_ml, updated_at)
-           VALUES (?, ?, ?, ?, ?)
-           ON CONFLICT(name) DO UPDATE SET
+          `INSERT INTO bottles (slot, name, capacity_ml, original_capacity_ml, serving_ml, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(slot) DO UPDATE SET
+             name = excluded.name,
              capacity_ml = excluded.capacity_ml,
              original_capacity_ml = excluded.original_capacity_ml,
              serving_ml = excluded.serving_ml,
              updated_at = excluded.updated_at`,
         )
-        .bind(bottle.name, bottle.capacityMl, bottle.originalCapacityMl, bottle.servingMl, now),
+        .bind(bottle.slot ?? index, bottle.name, bottle.capacityMl, bottle.originalCapacityMl, bottle.servingMl, now),
+    );
+  });
+
+  // Same pruning as recipes below, e.g. when the Pi has fewer slots than before.
+  if ((payload.bottles ?? []).length > 0) {
+    statements.push(db.prepare('DELETE FROM bottles WHERE updated_at < ?').bind(now));
+  }
+
+  if (Array.isArray(payload.availableBottles)) {
+    statements.push(
+      db.prepare('UPDATE status SET available_bottles_json = ? WHERE id = 1').bind(JSON.stringify(payload.availableBottles)),
     );
   }
 

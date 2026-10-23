@@ -12,31 +12,14 @@
 //   POST {"op": "delete", "recipeId": "123"}
 //   GET  -> the 20 most recent commands with their status
 
+import {json, isAdmin, preflight} from '../../_lib/admin.js';
+
 const MAX_PENDING = 50;
 
-const CORS = {
-  'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'authorization, content-type',
-  'access-control-allow-methods': 'GET, POST, OPTIONS',
-};
-
-function json(body, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {'content-type': 'application/json', 'cache-control': 'no-store', ...CORS},
-  });
-}
-
-function isAuthorized(request, env) {
-  return Boolean(env.ADMIN_TOKEN) && request.headers.get('authorization') === `Bearer ${env.ADMIN_TOKEN}`;
-}
-
-export async function onRequestOptions() {
-  return new Response(null, {status: 204, headers: CORS});
-}
+export const onRequestOptions = preflight;
 
 export async function onRequestGet({request, env}) {
-  if (!isAuthorized(request, env)) return json({error: 'unauthorized'}, 401);
+  if (!isAdmin(request, env)) return json({error: 'unauthorized'}, 401);
 
   const rows = await env.DB.prepare(
     'SELECT id, op, recipe_id, status, error, created_at FROM recipe_commands ORDER BY id DESC LIMIT 20',
@@ -45,7 +28,7 @@ export async function onRequestGet({request, env}) {
 }
 
 export async function onRequestPost({request, env}) {
-  if (!isAuthorized(request, env)) return json({error: 'unauthorized'}, 401);
+  if (!isAdmin(request, env)) return json({error: 'unauthorized'}, 401);
 
   let body;
   try {

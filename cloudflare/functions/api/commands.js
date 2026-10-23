@@ -3,8 +3,8 @@
 // The Pi's side of the recipe-edit queue (see admin/recipes.js).
 // Bearer-token protected with REPORT_TOKEN, like /api/report.
 //
-//   GET  -> {"commands": [{id, op, recipeId, recipe}]}  (pending, oldest first)
-//   POST {"results": [{"id": 1, "ok": true}, {"id": 2, "ok": false, "error": "..."}]}
+//   GET  -> {"commands": [{id, op, recipeId, recipe}], "bottleCommands": [{id, slot, bottle}]}  (pending, oldest first)
+//   POST {"results": [{"id": 1, "ok": true}, ...], "bottleResults": [{"id": 1, "ok": false, "error": "..."}]}
 
 function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -24,7 +24,12 @@ export async function onRequestGet({request, env}) {
     "SELECT id, op, recipe_id, recipe_json FROM recipe_commands WHERE status = 'pending' ORDER BY id LIMIT 20",
   ).all();
 
+  const bottleRows = await env.DB.prepare(
+    "SELECT id, slot, bottle_json FROM bottle_commands WHERE status = 'pending' ORDER BY id LIMIT 20",
+  ).all();
+
   return json({
+    bottleCommands: (bottleRows.results ?? []).map((r) => ({id: r.id, slot: r.slot, bottle: JSON.parse(r.bottle_json)})),
     commands: (rows.results ?? []).map((r) => ({
       id: r.id,
       op: r.op,
@@ -45,11 +50,17 @@ export async function onRequestPost({request, env}) {
   }
 
   const now = new Date().toISOString();
-  const statements = (body?.results ?? []).map((r) =>
-    env.DB.prepare(
-      "UPDATE recipe_commands SET status = ?, error = ?, resolved_at = ? WHERE id = ? AND status = 'pending'",
-    ).bind(r.ok ? 'applied' : 'failed', r.ok ? null : String(r.error ?? 'failed').slice(0, 200), now, r.id),
-  );
+  const ack = (table) => (r) =>
+    env.DB.prepare(`UPDATE ${table} SET status = ?, error = ?, resolved_at = ? WHERE id = ? AND status = 'pending'`).bind(
+      r.ok ? 'applied' : 'failed',
+      r.ok ? null : String(r.error ?? 'failed').slice(0, 200),
+      now,
+      r.id,
+    );
+  const statements = [
+    ...(body?.results ?? []).map(ack('recipe_commands')),
+    ...(body?.bottleResults ?? []).map(ack('bottle_commands')),
+  ];
   if (statements.length > 0) await env.DB.batch(statements);
 
   return json({ok: true});
