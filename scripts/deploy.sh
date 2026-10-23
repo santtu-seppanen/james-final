@@ -57,7 +57,6 @@ if [ "$LOCAL" != "$REMOTE" ]; then
   # protocol some of jest's transitive deps use, and jest is dev-only
   # anyway (tests run on a real machine, not the Pi).
   npm install --production
-  echo "$NEW_SHA" > VERSION
   cd "$REPO_DIR"
 
   echo "Building UI (Node 18 via nvm)..."
@@ -70,6 +69,13 @@ if [ "$LOCAL" != "$REMOTE" ]; then
   sudo rm -rf /var/www/html/*
   sudo cp -r build/* /var/www/html/
   cd "$REPO_DIR"
+
+  # Only now - once the new UI is actually being served - tell kiosks a new
+  # version exists (server/index.js serves this file at /api/version, and
+  # the UI's VersionBanner compares it to the SHA baked into the build).
+  # Writing it earlier made the banner appear ~30s before the new build was
+  # in /var/www/html, so reloading just fetched the old UI again.
+  echo "$NEW_SHA" > "$REPO_DIR/server/VERSION"
 
   restart_server
 else
