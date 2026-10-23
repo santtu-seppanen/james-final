@@ -4,7 +4,6 @@ var http = require("http").createServer(app);
 var io = require("socket.io")(http);
 var cors = require("cors");
 var fs = require("fs");
-var AWS = require("aws-sdk");
 var exec = require("child_process").exec;
 const recipesConfig = "./recipes_config.json";
 const servos = require("./servos_config.json");
@@ -12,98 +11,26 @@ const metricsPath = "./metrics.json";
 const pourTimeoutMs = 8000;
 const bottlesConfig = "./bottles_config.json";
 const availableBottlesConfig = "./available_bottles_config.json";
-const cron = require("cron");
 const { networkInterfaces } = require("os");
 const nets = networkInterfaces();
 var bottles = [];
 var recipes = {};
 const socketName = "servoState";
-const WebSocket = require("ws");
-let socket = null;
 // ****** Metrics variables ******
+// Kept locally in metrics.json (read by reporter.js, which polls it to the
+// public Cloudflare dashboard) - this used to also be pushed live over an
+// AWS API Gateway WebSocket to an older private dashboard and to handle
+// Alexa voice orders. Both were removed: the Pi now reports out on its own
+// schedule instead of needing a live inbound connection, and the Alexa
+// integration was already disabled (see the commented-out @reboot line in
+// crontab).
 const gauges = [];
-let metricsData = null;
+let metricsData = JSON.parse(fs.readFileSync(metricsPath));
 let drinksServed = 0;
 let alcoholServed = 0;
 let drinksSplits = [];
-let connectionAlive = false;
 
 require("dotenv").config();
-
-// Infra endpoints come from the environment so they're not sitting in a
-// public repo's git history. See .env.example.
-const WS_ENDPOINT = process.env.JAMES_WS_ENDPOINT;
-const S3_BUCKET = process.env.JAMES_S3_BUCKET;
-
-const openWSConnection = () => {
-  socket = new WebSocket(WS_ENDPOINT);
-
-  setTimeout(() => {
-    console.log("Socket open");
-    socket.send(
-      JSON.stringify({
-        action: "register",
-        data: { application: "james", origin: "server" },
-      })
-    );
-    connectionAlive = true;
-  }, 1500);
-
-  socket.onmessage = function (event) {
-    console.log(event.data);
-    let jsonData = JSON.parse(event.data);
-    if (jsonData.testConnection && jsonData.origin === "server") {
-      connectionAlive = true;
-    } else if (
-      jsonData.application === "james" &&
-      jsonData.origin === "client"
-    ) {
-      console.log("Sending initial data...");
-      metricsData.origin = "server";
-      socket.send(
-        JSON.stringify({
-          action: "sendmessage",
-          data: metricsData,
-          directConnectionId: jsonData.connectionId,
-          origin: "server",
-        })
-      );
-    }
-    else if (jsonData.origin === "Alexa") {
-      let drinks = getDrinks(true);
-      console.log(drinks);
-      let drinkAvailable = false;
-      const drinkName = jsonData.drinkName;
-
-      for (var item in drinks){
-
-        var name = drinks[item].name;
-
-        if (name == drinkName) {
-            drinkAvailable = true;
-        }
-      }
-
-      if (drinkAvailable){
-        const totalPourTime = pourDrink(drinkName);
-        if (totalPourTime == 0) {
-          console.log(
-            drinkName + " not found! Total pour time: " + totalPourTime
-          );
-        } else {
-          console.log(
-            "Pouring " + drinkName + ". Total pour time: " + totalPourTime
-          );
-        }
-      }
-      else {
-        console.log("Something missing, drink is not available");
-      }
-    }
-  };
-
-  metricsData = JSON.parse(fs.readFileSync(metricsPath));
-};
 
 // middleware
 app.use(express.json());
@@ -313,9 +240,10 @@ function sendBottlesUpdateDashboard() {
   ];
   metricsData.containers[1].controls[0].summaries = summary;
   metricsData.containers[1].controls[0].metrics = drinksSplits;
-  console.log("Sending data...");
-  socket.send(JSON.stringify({ action: "sendmessage", data: metricsData }));
 
+  // metrics.json is the only thing written here now - reporter.js polls it
+  // and pushes to the public dashboard on its own schedule (see
+  // JAMES_DASHBOARD_URL / JAMES_REPORT_TOKEN in .env.example).
   fs.writeFileSync(metricsPath, JSON.stringify(metricsData));
 }
 
@@ -338,50 +266,11 @@ fs.watchFile(recipesConfig, (curr, prev) => {
   getDrinks(true);
 });
 
-process.on("SIGTERM", () => {
-  console.log("Killing");
-  if (socket != null) {
-    socket.send(JSON.stringify({ action: "unregister" }));
-    socket.close();
-  }
-});
-
-process.on("SIGINT", () => {
-  console.log("Killing");
-  console.log("Unregister");
-  if (socket != null) {
-    socket.send(JSON.stringify({ action: "unregister" }));
-    socket.close();
-  }
-  process.exit(0);
-});
-
 process.on("uncaughtException", function (err) {
   console.log("WARNING: " + err);
 });
 
 getDrinks(true);
-
-var cronJob = cron.job("0 */5 * * * *", function () {
-  if (connectionAlive) {
-    connectionAlive = false;
-    console.log("Ping socket connection.");
-    socket.send(
-      //Just keepalive for server..
-      JSON.stringify({
-        action: "sendmessage",
-        testConnection: true,
-        data: { origin: "server" },
-      })
-    );
-  } else {
-    console.log("Reconnecting");
-    openWSConnection();
-  }
-});
-
-cronJob.start();
-openWSConnection();
 
 http.listen(8000, () => {
   console.log("listening on *:8000");
@@ -506,27 +395,5 @@ function getDrinks(filterBottles) {
     console.log("Malformed " + bottlesConfig);
   }
 
-  syncToS3(drinks);
-
   return drinks;
-}
-
-function syncToS3(availableDrinks) {
-  const s3 = new AWS.S3({
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  });
-
-  const params = {
-    Bucket: S3_BUCKET,
-    Key: "available-recipes.json",
-    Body: JSON.stringify(availableDrinks),
-  };
-
-  s3.upload(params, (err, data) => {
-    if (err) {
-      console.log(err);
-    }
-    console.log(data.Location);
-  });
 }
