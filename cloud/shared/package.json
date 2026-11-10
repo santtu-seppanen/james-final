@@ -1,0 +1,4 @@
+{
+  "comment": "cloud/package.json is type=module; these files are CommonJS because server/cloud-sync.js require()s them on the Pi's Node 10.",
+  "type": "commonjs"
+}

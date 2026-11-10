@@ -1,0 +1,4 @@
+# Copy to .dev.vars for `wrangler dev`. Never commit the real file.
+# In production these are Worker secrets: `wrangler secret put DEVICE_TOKEN` etc.
+DEVICE_TOKEN=dev-device-token
+ADMIN_TOKEN=dev-admin-token
