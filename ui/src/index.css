@@ -531,10 +531,18 @@ img {
 }
 
 /* The orbit is just the drink pictures - no cards, no frames. Only the
-   drink in front gets a name (.orbit__title). */
+   drink in front is named (.orbit__info), with its ingredients. */
+.carousel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .orbit {
-  position: absolute;
-  inset: 0 0 104px 0;
+  position: relative;
+  flex: 1;
+  min-height: 0;
   touch-action: pan-y;
   overflow: hidden;
 }
@@ -547,7 +555,7 @@ img {
   border: 0;
   background: none;
   aspect-ratio: 1;
-  transition: transform 0.4s ease, opacity 0.4s ease;
+  transition: transform 0.6s ease, opacity 0.6s ease;
 }
 
 .orbit__card img {
@@ -566,22 +574,48 @@ img {
   filter: drop-shadow(0 0 28px var(--drink)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
 }
 
-.orbit__title {
-  position: absolute;
-  left: 80px;
-  right: 80px;
-  bottom: 22px;
-  margin: 0;
+.orbit__info {
+  padding: 4px 80px 10px;
   text-align: center;
+}
+
+.orbit__info p {
+  margin: 0;
+}
+
+.orbit__title {
   font-size: 34px;
   font-weight: 700;
   line-height: 1.1;
   color: var(--text);
 }
 
+.orbit__ingredients {
+  margin-top: 6px;
+  font-size: 20px;
+  color: var(--text-muted);
+}
+
+.orbit__fresh {
+  margin-top: 6px;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.home__pour {
+  padding: 8px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pour-button {
+  width: 100%;
+}
+
 .carousel__arrow {
   position: absolute;
-  bottom: 8px;
+  bottom: 4px;
   z-index: 200;
   width: 64px;
   height: 64px;

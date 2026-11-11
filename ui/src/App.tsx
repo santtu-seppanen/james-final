@@ -2,27 +2,27 @@ import {useEffect, useRef, useState} from 'react';
 import io, {type Socket} from 'socket.io-client';
 // Socket's shape comes from src/socketio-client.d.ts.
 import type {Bottle, PourResult, Recipe, ServoStateEvent} from './types';
-import {API_BASE, getBottles, getRecipes, saveRecipe} from './api';
-import {useIdle} from './hooks';
-import {DONE_SECONDS, IDLE_SECONDS} from './config';
-import {recordPour} from './stats';
+import {API_BASE, getBottles, getRecipes, getVersion, pourAdHoc, pourByName, saveRecipe} from './api';
+import {DONE_SECONDS} from './config';
+import {humanPourError} from './pourError';
 import {HomeScreen} from './components/HomeScreen';
-import {ConfirmScreen} from './components/ConfirmScreen';
 import {PouringScreen} from './components/PouringScreen';
 import {DoneScreen} from './components/DoneScreen';
-import {AttractScreen} from './components/AttractScreen';
-import {VersionBanner} from './components/VersionBanner';
 import {LoadingScreen, LockedScreen, OfflineScreen} from './components/SystemStates';
 
-// Guest flow: attract <-> home -> confirm -> pouring -> done -> home.
-// locked/offline/loading are overlays decided below the switch, so any
-// screen can fall into them.
-type View = 'home' | 'confirm' | 'pouring' | 'done' | 'attract';
+// The whole guest flow: home (the ring + Pour) -> pouring -> done -> home.
+// locked/offline/loading are overlays decided below, so any screen can
+// fall into them.
+type View = 'home' | 'pouring' | 'done';
 
 // How long the socket may be down before we admit the backend is gone -
 // deploy.sh restarts it in well under this, and a flash of "offline"
 // during every deploy would be worse than a short delay.
 const OFFLINE_GRACE_MS = 4000;
+
+// A new version is picked up on its own, but only from the home screen so
+// nobody's pour countdown gets yanked away.
+const VERSION_POLL_MS = 30_000;
 
 export default function App() {
   const [view, setView] = useState<View>('home');
@@ -32,10 +32,11 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [stale, setStale] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<Recipe | null>(null);
-  const [isAiDrink, setIsAiDrink] = useState(false);
-  const [pour, setPour] = useState<{result: PourResult; show: boolean} | null>(null);
+  const [aiDrink, setAiDrink] = useState<Recipe | null>(null);
   const [savedAs, setSavedAs] = useState<string | null>(null);
+  const [pour, setPour] = useState<{result: PourResult; show: boolean} | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -78,14 +79,26 @@ export default function App() {
     };
   }, []);
 
-  // Attract mode only from the menu - never mid-pour.
-  useIdle(IDLE_SECONDS, view === 'home', () => setView('attract'));
+  // The build's own version is baked in (__APP_VERSION__); deploy.sh writes
+  // the same SHA to server/VERSION once the new build is being served.
+  useEffect(() => {
+    const check = () => {
+      getVersion()
+        .then((data) => {
+          if (data.version && data.version !== 'unknown' && data.version !== __APP_VERSION__) setStale(true);
+        })
+        .catch(() => {
+          // Backend mid-restart during a deploy - the next poll catches up.
+        });
+    };
+    check();
+    const id = window.setInterval(check, VERSION_POLL_MS);
+    return () => window.clearInterval(id);
+  }, []);
 
-  function selectRecipe(recipe: Recipe, ai: boolean) {
-    setSelectedDrink(recipe);
-    setIsAiDrink(ai);
-    setView('confirm');
-  }
+  useEffect(() => {
+    if (stale && view === 'home') window.location.reload();
+  }, [stale, view]);
 
   function goHome() {
     setSelectedDrink(null);
@@ -94,21 +107,28 @@ export default function App() {
     setView('home');
   }
 
-  function pourStarted(result: PourResult, show: boolean) {
-    setPour({result, show});
-    setView('pouring');
-    if (!selectedDrink) return;
-    recordPour(selectedDrink, bottles);
-    // Serving an AI drink is accepting it: it goes on the menu too. A
-    // failed save never gets in the way of the pour that already started.
-    if (isAiDrink) {
-      const drink = selectedDrink;
-      saveRecipe(drink.friendlyname, drink)
-        .then((saved) => {
-          setRecipes((prev) => [...prev, {...drink, name: saved.id, friendlyname: saved.friendlyname}]);
-          setSavedAs(saved.friendlyname);
-        })
-        .catch(() => setSavedAs(null));
+  // Resolves to an error message, or null once the pour has started.
+  async function serve(recipe: Recipe, isAi: boolean): Promise<string | null> {
+    try {
+      const result = isAi ? await pourAdHoc(recipe) : await pourByName(recipe.name || recipe.friendlyname);
+      if (!result.success) return humanPourError(result.error);
+      setSelectedDrink(recipe);
+      setPour({result, show: false});
+      setView('pouring');
+      // Serving an AI drink is accepting it: it goes on the menu too. A
+      // failed save never gets in the way of the pour that already started.
+      if (isAi) {
+        setAiDrink(null);
+        saveRecipe(recipe.friendlyname, recipe)
+          .then((saved) => {
+            setRecipes((prev) => [...prev, {...recipe, name: saved.id, friendlyname: saved.friendlyname}]);
+            setSavedAs(saved.friendlyname);
+          })
+          .catch(() => setSavedAs(null));
+      }
+      return null;
+    } catch (e) {
+      return humanPourError(e instanceof Error ? e.message : '');
     }
   }
 
@@ -126,19 +146,6 @@ export default function App() {
     return <LoadingScreen />;
   }
 
-  if (view === 'attract') {
-    return <AttractScreen recipes={recipes} bottles={bottles} onWake={() => setView('home')} />;
-  }
-
-  if (view === 'confirm' && selectedDrink) {
-    return (
-      <>
-        <VersionBanner />
-        <ConfirmScreen recipe={selectedDrink} bottles={bottles} isAiDrink={isAiDrink} onBack={goHome} onStarted={pourStarted} />
-      </>
-    );
-  }
-
   if (view === 'pouring' && selectedDrink && pour) {
     return (
       <PouringScreen
@@ -153,20 +160,8 @@ export default function App() {
   }
 
   if (view === 'done' && selectedDrink) {
-    return (
-      <DoneScreen
-        recipe={selectedDrink}
-        savedAs={savedAs}
-        autoReturnSeconds={DONE_SECONDS}
-        onHome={goHome}
-      />
-    );
+    return <DoneScreen recipe={selectedDrink} savedAs={savedAs} autoReturnSeconds={DONE_SECONDS} onHome={goHome} />;
   }
 
-  return (
-    <>
-      <VersionBanner />
-      <HomeScreen bottles={bottles} recipes={recipes} onSelect={selectRecipe} />
-    </>
-  );
+  return <HomeScreen bottles={bottles} recipes={recipes} aiDrink={aiDrink} onAiDrink={setAiDrink} onServe={serve} />;
 }
