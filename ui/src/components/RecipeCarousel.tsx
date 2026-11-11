@@ -1,7 +1,7 @@
 import {useLayoutEffect, useRef, useState} from 'react';
 import type {Bottle, Recipe} from '../types';
 import {recipeImage} from '../images';
-import {drinkColor, rgbString, STRENGTH_LABEL, strengthHint} from '../drinkColor';
+import {drinkColor, rgbString} from '../drinkColor';
 import {Icon} from './Icon';
 
 interface Props {
@@ -90,8 +90,6 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
             const y = (Math.cos(angle) - 0.35) * radiusY;
             const scale = 0.42 + 0.58 * depth;
             const front = delta === 0;
-            const strength = strengthHint(recipe.ingredients);
-            const chips = recipe.ingredients.slice(0, 3);
             return (
               <button
                 key={recipe.name ?? recipe.friendlyname}
@@ -100,7 +98,7 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
                   ['--drink' as string]: rgbString(drinkColor(recipe)),
                   width: cardW,
                   transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(${scale})`,
-                  opacity: front ? 1 : 0.35 + 0.55 * depth,
+                  opacity: front ? 1 : 0.3 + 0.55 * depth,
                   zIndex: Math.round(depth * 100),
                 }}
                 onClick={() => {
@@ -108,26 +106,16 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
                   if (front) onSelect(recipe);
                   else setIndex(i);
                 }}
-                aria-label={front ? `${recipe.friendlyname}, ${STRENGTH_LABEL[strength]}. Tap to choose.` : `Show ${recipe.friendlyname}`}>
-                <span className="carousel__art" aria-hidden="true">
-                  <img src={recipeImage(recipe)} alt="" />
-                </span>
-                <span className="carousel__name">{recipe.friendlyname}</span>
-                <span className="ring__details" aria-hidden="true">
-                  <span className="recipe-card__chips">
-                    {chips.map((ing) => (
-                      <span key={ing.name} className="chip">
-                        {ing.name}
-                      </span>
-                    ))}
-                    {recipe.ingredients.length > 3 && <span className="chip chip--more">+{recipe.ingredients.length - 3}</span>}
-                  </span>
-                  <span className={`recipe-card__strength strength--${strength}`}>{STRENGTH_LABEL[strength]}</span>
-                </span>
+                aria-label={front ? `${recipe.friendlyname}. Tap to choose.` : `Show ${recipe.friendlyname}`}>
+                <img src={recipeImage(recipe)} alt="" draggable={false} />
               </button>
             );
           })}
       </div>
+
+      <p className="ring__title" aria-live="polite">
+        {recipes[index].friendlyname}
+      </p>
 
       <button className="carousel__arrow carousel__arrow--prev" onClick={() => turn(-1)} aria-label="Previous drink">
         <Icon name="back" size={32} />
