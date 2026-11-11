@@ -1,0 +1,65 @@
+name: Deploy cloud Worker
+
+# Tests run on every push touching cloud/. The deploy job is opt-in: it only
+# runs once the repo variable CLOUD_DEPLOY_ENABLED is set to "true" (after the
+# one-time setup in cloud/README.md: real database_id in wrangler.toml,
+# DEVICE_TOKEN / ADMIN_TOKEN Worker secrets). Until then nothing is deployed
+# even though the CLOUDFLARE_* secrets already exist for the dashboard.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/deploy-cloud.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloud
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+        working-directory: cloud
+      - run: npm test
+        working-directory: cloud
+
+  deploy:
+    needs: test
+    if: vars.CLOUD_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # wrangler-action uses the project's pinned wrangler when installed.
+      - run: npm ci
+        working-directory: cloud
+
+      - name: Apply D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud
+          command: d1 migrations apply james-cloud --remote
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloud
+          command: deploy
