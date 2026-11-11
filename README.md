@@ -16,6 +16,11 @@
 - `cloudflare/` — public API backing the dashboard. Cloudflare Pages
   Functions + D1, deployed on every push (`.github/workflows/deploy-cloudflare.yml`).
   See `cloudflare/README.md` for one-time setup (D1 database, secrets).
+- `cloud/` — Cloudflare Worker + D1 holding the device's **configuration**
+  (bottles, recipes, LED/sound/show settings) as a version history, plus the
+  Pi's stats, and serving the config UI. `server/cloud-sync.js` on the Pi
+  pulls the current version (ETag-polled) and reports back. See
+  `cloud/README.md`.
 
 ## How the bot works
 
@@ -110,3 +115,24 @@ Reads are public and unauthenticated; writes require `REPORT_TOKEN`. See
 `cloudflare/README.md` for setup. `reporter.js` reports on a timer, not
 per-pour — wiring a live pour event into it is a documented follow-up (see
 comments in `server/reporter.js` / `cloudflare/functions/api/report.js`).
+
+## Cloud config (`cloud/`)
+
+```
+config UI (cloud/public, admin token)
+   --PUT /api/admin/config--> Worker + D1: config_versions (v1, v2, ..., ETag)
+Pi (server/cloud-sync.js, cron ~1/min, device token)
+   --GET /api/device/config (If-None-Match)--> 304 | new version
+        validate with cloud/shared/config-validate.js, then write
+        bottles/recipes/available_bottles/settings .json in JAMES_DATA_DIR
+   --POST /api/device/stats--> uptime, levels, pours, errors, applied version
+```
+
+The cloud is the source of truth for bottles, available bottles, recipes
+and `settings.json` (LED/sound/show; schema in
+`cloud/shared/settings-schema.js`). Live fill levels stay on the Pi. If the
+Worker is unreachable the last applied files stay in place and nothing
+about pouring changes — the sync client is a separate process from
+`index.js`, like `reporter.js`. Local edits on the kiosk are reported back
+and can be pulled into a new version with "Use device state as draft" in
+the UI; they are overwritten by the next published version otherwise.
