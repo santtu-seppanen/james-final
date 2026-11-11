@@ -111,3 +111,30 @@ test('canonicalJson is key-order independent', () => {
   assert.equal(canonicalJson({b: 1, a: [{d: 1, c: 2}]}), canonicalJson({a: [{c: 2, d: 1}], b: 1}));
   assert.equal(canonicalJson({a: undefined, b: 1}), '{"b":1}');
 });
+
+test('refuses __proto__ keys, URL-ish image names and path-like track names', () => {
+  const proto = goodConfig();
+  proto.recipes = JSON.parse('{"__proto__": {"friendlyname": "x", "ingredients": [{"name": "vodka", "serving": 25}]}}');
+  assert.equal(validateConfig(proto).ok, false);
+
+  const protoSettings = goodConfig();
+  protoSettings.settings = JSON.parse('{"__proto__": {"polluted": true}}');
+  assert.equal(validateConfig(protoSettings).ok, false);
+  const protoField = goodConfig();
+  protoField.settings = JSON.parse('{"led": {"__proto__": {"polluted": true}}}');
+  assert.equal(validateConfig(protoField).ok, false);
+  assert.equal({}.polluted, undefined);
+
+  const image = goodConfig();
+  image.recipes.vodkatonic.imageUrl = 'javascript:alert(1)';
+  assert.match(validateConfig(image).errors[0], /imageUrl/);
+
+  for (const track of ['../../etc/passwd', '/etc/passwd', 'a/b.mp3', '.hidden']) {
+    const bad = goodConfig();
+    bad.settings.show = {track};
+    assert.equal(validateConfig(bad).ok, false, track);
+  }
+  const fine = goodConfig();
+  fine.settings.show = {track: 'Darude - Sandstorm (radio edit).mp3'};
+  assert.equal(validateConfig(fine).ok, true);
+});

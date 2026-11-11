@@ -46,7 +46,15 @@ var SECTIONS = [
       {key: 'enabled', type: 'boolean', label: 'Enabled', default: false},
       {key: 'bpm', type: 'number', label: 'Default BPM (no beat map)', min: 60, max: 200, step: 1, default: 120},
       {key: 'audioLatencyMs', type: 'number', label: 'Audio latency (ms)', min: 0, max: 2000, step: 10, default: 100},
-      {key: 'track', type: 'string', label: 'Track file (empty = random)', maxLength: 200, default: ''},
+      // A file name only (the Pi joins it to its music dir): no slashes, no "..".
+      {
+        key: 'track',
+        type: 'string',
+        label: 'Track file (empty = random)',
+        maxLength: 200,
+        pattern: '^(?!\\.)[A-Za-z0-9 _.()-]*$',
+        default: '',
+      },
     ],
   },
   {

@@ -27,6 +27,7 @@ var MAX_INGREDIENT_ML = 500;
 var MAX_WAIT = 10;
 var MAX_NAME = 60;
 var ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+var IMAGE_RE = /^[A-Za-z0-9_-]{1,100}$/; // a key into the kiosk's bundled images, not a URL
 var BOTTLE_NAME_RE = /^[A-Za-z0-9 _&().+'-]{1,40}$/;
 
 function isPlainObject(value) {
@@ -115,7 +116,7 @@ function validateRecipes(input, availableByKey, bottles, errors) {
   ids.forEach(function (id) {
     var where = 'recipes[' + id + ']';
     var r = input[id];
-    if (!ID_RE.test(id)) {
+    if (!ID_RE.test(id) || id === '__proto__') {
       errors.push(where + ': id must match ' + ID_RE);
       return;
     }
@@ -176,8 +177,8 @@ function validateRecipes(input, availableByKey, bottles, errors) {
 
     var recipe = {friendlyname: String(r.friendlyname || '').trim(), ingredients: ingredients};
     if (r.imageUrl !== undefined && r.imageUrl !== null && r.imageUrl !== '') {
-      if (typeof r.imageUrl !== 'string' || r.imageUrl.length > 100) {
-        errors.push(where + '.imageUrl: must be a short string');
+      if (typeof r.imageUrl !== 'string' || !IMAGE_RE.test(r.imageUrl)) {
+        errors.push(where + '.imageUrl: must be an image name matching ' + IMAGE_RE);
       } else {
         recipe.imageUrl = r.imageUrl;
       }
@@ -195,7 +196,13 @@ function validateSettings(input, errors) {
   }
   var out = {};
   // Unknown sections and fields pass through untouched (see settings-schema.js).
+  // "__proto__" (an own key after JSON.parse) would replace the prototype on
+  // assignment instead of being copied, so it's refused outright.
   Object.keys(input).forEach(function (key) {
+    if (key === '__proto__' || (isPlainObject(input[key]) && Object.prototype.hasOwnProperty.call(input[key], '__proto__'))) {
+      errors.push('settings.' + key + ': reserved key "__proto__"');
+      return;
+    }
     out[key] = isPlainObject(input[key]) ? Object.assign({}, input[key]) : input[key];
   });
 
@@ -222,7 +229,11 @@ function validateSettings(input, errors) {
       } else if (field.type === 'enum') {
         if (field.options.indexOf(value) === -1) errors.push(where + ': must be one of ' + field.options.join(', '));
       } else if (field.type === 'string') {
-        if (typeof value !== 'string' || value.length > (field.maxLength || 200)) errors.push(where + ': must be a string');
+        if (typeof value !== 'string' || value.length > (field.maxLength || 200)) {
+          errors.push(where + ': must be a string');
+        } else if (field.pattern && !new RegExp(field.pattern).test(value)) {
+          errors.push(where + ': invalid characters');
+        }
       }
       sectionOut[field.key] = value;
     });

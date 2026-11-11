@@ -3,6 +3,7 @@
 
 // Default import: the shared module is CommonJS (it also runs on the Pi's Node 10).
 import validate from '../shared/config-validate.js';
+import {HttpError} from './http.js';
 
 const {canonicalJson} = validate;
 
@@ -73,12 +74,19 @@ export async function publish(db, deviceId, config, {author, note, rolledBackFro
   const etag = await makeEtag(version, bodyJson);
   const createdAt = new Date().toISOString();
   // (device_id, version) is the primary key, so two concurrent publishes
-  // can't both get the same number - the loser fails and retries.
-  await db
-    .prepare(
-      'INSERT INTO config_versions (device_id, version, etag, body_json, author, note, rolled_back_from, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    )
-    .bind(deviceId, version, etag, bodyJson, author ?? null, note ?? null, rolledBackFrom, createdAt)
-    .run();
+  // can't both get the same number - the loser gets a 409 and reloads.
+  try {
+    await db
+      .prepare(
+        'INSERT INTO config_versions (device_id, version, etag, body_json, author, note, rolled_back_from, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      )
+      .bind(deviceId, version, etag, bodyJson, author ?? null, note ?? null, rolledBackFrom, createdAt)
+      .run();
+  } catch (e) {
+    if (/UNIQUE|constraint/i.test(String(e && e.message))) {
+      throw new HttpError('config changed since you loaded it', 409, {currentVersion: version});
+    }
+    throw e;
+  }
   return {version, etag, author, note, rolledBackFrom, createdAt, config, unchanged: false};
 }

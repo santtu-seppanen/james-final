@@ -27,6 +27,24 @@ test('health is public, everything else needs the right token', async () => {
   assert.equal((await admin('GET', '/api/device/config')).status, 401);
   assert.equal((await client(worker.base, 'wrong')('GET', '/api/admin/overview')).status, 401);
   assert.equal((await admin('GET', '/api/admin/nope')).status, 404);
+  // Empty / malformed bearers never match, and nothing is exposed cross-origin
+  assert.equal((await client(worker.base, '')('GET', '/api/admin/overview', undefined, {authorization: 'Bearer '})).status, 401);
+  assert.equal((await client(worker.base, null)('GET', '/api/admin/overview', undefined, {authorization: ADMIN_TOKEN})).status, 401);
+  assert.equal((await client(worker.base, ADMIN_TOKEN + 'x')('GET', '/api/admin/overview')).status, 401);
+  const res = await admin('GET', '/api/admin/overview', undefined, {origin: 'https://evil.example'});
+  assert.equal(res.headers.get('access-control-allow-origin'), null);
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal((await admin('GET', '/api/admin/config/versions/99999999999999999999')).status, 404);
+});
+
+test('the config UI is served with a strict CSP and cannot be framed', async () => {
+  const page = await anon('GET', '/');
+  assert.equal(page.status, 200);
+  assert.match(page.text, /James config/);
+  assert.match(page.headers.get('content-security-policy') || '', /frame-ancestors 'none'/);
+  assert.match(page.headers.get('content-security-policy') || '', /script-src 'self'/);
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.notEqual((await anon('GET', '/_headers')).status, 200);
 });
 
 test('empty state: no config yet, no device', async () => {

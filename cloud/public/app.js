@@ -669,7 +669,7 @@
           field.options.forEach(function (o) { control.appendChild(el('option', {value: o, text: o})); });
           control.value = value;
         } else {
-          control = el('input', {type: 'text', maxlength: field.maxLength || 200, value: value, onchange: function (e) { set(e.target.value); }});
+          control = el('input', {type: 'text', maxlength: field.maxLength || 200, pattern: field.pattern, value: value, onchange: function (e) { set(e.target.value); }});
         }
         return el('label', {class: 'field field--row'}, [
           el('span', {}, [field.label, field.description ? el('div', {class: 'field__hint', text: field.description}) : null]),
