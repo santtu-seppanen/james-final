@@ -1,0 +1,15 @@
+[Unit]
+Description=James kiosk browser
+After=lightdm.service james.service
+Wants=james.service
+
+[Service]
+User=pi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+ExecStart=/home/pi/james-final/scripts/kiosk.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target

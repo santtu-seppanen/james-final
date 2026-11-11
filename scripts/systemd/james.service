@@ -1,0 +1,14 @@
+[Unit]
+Description=James drink server
+After=network.target servoblaster.service
+Wants=servoblaster.service
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/james-final/server
+ExecStart=/usr/bin/node /home/pi/james-final/server/index.js
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

@@ -95,9 +95,9 @@ require("dotenv").config();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
-app.get("/", (req, res) => {
-  res.sendFile(__dirname + "/index.html");
-});
+// The kiosk UI (ui/build, built by scripts/deploy.sh) is served from here, so
+// there is no separate web server on the Pi.
+app.use(express.static(path.join(__dirname, "..", "ui", "build")));
 
 // scripts/deploy.sh writes VERSION (the deployed commit SHA) right after a
 // successful pull+build. The UI polls this and prompts a reload when it
