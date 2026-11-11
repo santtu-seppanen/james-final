@@ -26,3 +26,7 @@ export const bottleImages = toNameMap(bottleModules);
 
 export const fallbackDrinkImage = drinkImages['drink'];
 export const fallbackBottleImage = bottleImages['bottle'];
+
+export function recipeImage(recipe: {imageUrl?: string}): string {
+  return (recipe.imageUrl && drinkImages[recipe.imageUrl]) || fallbackDrinkImage;
+}

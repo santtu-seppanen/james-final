@@ -1,5 +1,6 @@
 import {useEffect, useState} from 'react';
 import {getVersion} from '../api';
+import {Icon} from './Icon';
 
 // The build's own version is baked in at build time (see vite.config.ts /
 // package.json build script setting __APP_VERSION__ from `git rev-parse
@@ -10,7 +11,7 @@ import {getVersion} from '../api';
 // running stale JS and should reload.
 const POLL_INTERVAL_MS = 60_000;
 
-export function VersionBanner() {
+export function VersionBanner({quiet = false}: {quiet?: boolean}) {
   const [updateAvailable, setUpdateAvailable] = useState(false);
 
   useEffect(() => {
@@ -31,13 +32,15 @@ export function VersionBanner() {
     return () => window.clearInterval(id);
   }, []);
 
-  if (!updateAvailable) return null;
+  // `quiet` while pouring: don't tempt anyone to reload mid-countdown.
+  if (!updateAvailable || quiet) return null;
 
   return (
-    <div className="version-banner">
-      <span>A new version was deployed.</span>
-      <button className="button" onClick={() => window.location.reload()}>
-        Reload
+    <div className="version-banner" role="status">
+      <Icon name="refresh" />
+      <span>A new version of James is ready.</span>
+      <button className="button button--small" onClick={() => window.location.reload()}>
+        Reload now
       </button>
     </div>
   );
