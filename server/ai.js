@@ -1,7 +1,7 @@
 // AI drink generation, talking to the Anthropic API directly over HTTPS
 // (via node-fetch) rather than the official @anthropic-ai/sdk - the SDK
 // targets modern Node, and the Pi runs Node 10. Written in Node
-// 10-compatible syntax for the same reason (see reporter.js).
+// 10-compatible syntax for the same reason (the Pi runs Node 10).
 var fetch = require('node-fetch');
 
 var ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;

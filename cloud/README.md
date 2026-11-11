@@ -4,10 +4,8 @@ Cloudflare Worker + D1. Holds the device's configuration (bottles, available
 bottles, recipes, LED/sound/show settings) as an append-only version history,
 ingests the Pi's status reports, and serves the config UI (`public/`).
 
-Separate from `cloudflare/` (the public dashboard's Pages Functions + D1): that
-one mirrors what the Pi reports for a read-only page and queues one-off edits,
-this one is the source of truth the Pi pulls from. They can coexist; folding
-the dashboard into this Worker later is an option.
+This Worker is the only backend: the Pi pulls its configuration from here and
+reports its state here.
 
 ```
 config UI (public/, bearer ADMIN_TOKEN)
@@ -80,7 +78,7 @@ so a deploy without secrets is locked rather than open:
 - `ADMIN_TOKEN` — typed into the UI (kept in `sessionStorage` for the tab).
 
 Why a token and not Cloudflare Access: one admin, no custom domain needed,
-same model the existing dashboard uses, and the API stays curl-able. Use long
+and the API stays curl-able. Use long
 random values (`openssl rand -hex 32`); there is no rate limiting. Access
 can be layered on top without code changes — put an Access application in
 front of the Worker's hostname for `/` (the UI) and the Worker will record
@@ -115,7 +113,7 @@ JAMES_CLOUD_URL=https://james-cloud.<account>.workers.dev
 JAMES_CLOUD_DEVICE_TOKEN=<the DEVICE_TOKEN value>
 ```
 
-and a cron line next to `reporter.js`'s:
+and a cron line (next to `deploy.sh`'s):
 
 ```
 */1 * * * * node /home/pi/james-final/server/cloud-sync.js >> /home/pi/james-final/cloud-sync.log 2>&1
@@ -130,8 +128,7 @@ has, so applying it changes nothing.
 
 GitHub Actions: `.github/workflows/deploy-cloud.yml` runs the tests on pushes
 to `main` touching `cloud/`. Deploying (migrations + `wrangler deploy`, with
-the same `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets as the
-dashboard workflow) is opt-in: set the repository **variable**
+the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets) is opt-in: set the repository **variable**
 `CLOUD_DEPLOY_ENABLED=true` (Settings → Secrets and variables → Actions →
 Variables) once the one-time setup above is done. The API token needs
 Workers Scripts:Edit and D1:Edit on the account.

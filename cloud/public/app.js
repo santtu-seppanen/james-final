@@ -1,4 +1,4 @@
-// James config UI. Plain JS, no build step (same as dashboard/).
+// James config UI. Plain JS, no build step.
 //
 // Model: `current` is the published config (from GET /api/admin/config),
 // `draft` is a deep copy the user edits. When they differ the publish bar

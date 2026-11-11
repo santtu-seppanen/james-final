@@ -11,11 +11,6 @@
 - `scripts/deploy.sh` — runs on the Pi via cron. Pulls this repo, and on a
   change: reinstalls/rebuilds both `server/` and `ui/`, deploys the built UI
   to `/var/www/html`, and restarts the backend. See its own header comment.
-- `dashboard/` — public, read-only status dashboard. Static site, deployed
-  to **GitHub Pages** on every push (`.github/workflows/deploy-dashboard.yml`).
-- `cloudflare/` — public API backing the dashboard. Cloudflare Pages
-  Functions + D1, deployed on every push (`.github/workflows/deploy-cloudflare.yml`).
-  See `cloudflare/README.md` for one-time setup (D1 database, secrets).
 - `cloud/` — Cloudflare Worker + D1 holding the device's **configuration**
   (bottles, recipes, LED/sound/show settings) as a version history, plus the
   Pi's stats, and serving the config UI. `server/cloud-sync.js` on the Pi
@@ -48,8 +43,7 @@
    `/getAvailableBottles`, `/setAvailableBottles`, which read/write the
    `*_config.json` files.
 7. `metrics.json` (drinks served, alcohol poured) is written on every pour
-   and polled by `server/reporter.js` (cron, ~1/min) out to the public
-   dashboard — see below.
+   and reported to the cloud by `server/cloud-sync.js` — see below.
 
 ### AI-generated drinks
 
@@ -98,23 +92,8 @@ shows a reload prompt when they drift apart.
 - The admin PIN is checked **client-side only**, inside the bundle — it
   deters casual taps on a kiosk touchscreen, it is not real auth. Read from
   `VITE_ADMIN_PIN` (see `ui/.env.example`), not hardcoded.
-- `ANTHROPIC_API_KEY`, `JAMES_REPORT_TOKEN`, etc. live in `server/.env`,
+- `ANTHROPIC_API_KEY`, `JAMES_CLOUD_DEVICE_TOKEN`, etc. live in `server/.env`,
   never in git (see `server/.env.example`).
-
-## Public dashboard
-
-```
-Pi (server/reporter.js, cron every ~1 min)
-   --POST /api/report (bearer token)-->
-Cloudflare Pages Functions (cloudflare/functions/api/) + D1
-   <--GET /api/dashboard (public, CORS open)--
-dashboard/ (static site) on GitHub Pages
-```
-
-Reads are public and unauthenticated; writes require `REPORT_TOKEN`. See
-`cloudflare/README.md` for setup. `reporter.js` reports on a timer, not
-per-pour — wiring a live pour event into it is a documented follow-up (see
-comments in `server/reporter.js` / `cloudflare/functions/api/report.js`).
 
 ## Cloud config (`cloud/`)
 
@@ -133,6 +112,6 @@ and `settings.json` (LED/sound/show; schema in
 `cloud/shared/settings-schema.js`). Live fill levels stay on the Pi. If the
 Worker is unreachable the last applied files stay in place and nothing
 about pouring changes — the sync client is a separate process from
-`index.js`, like `reporter.js`. Local edits on the kiosk are reported back
+`index.js`. Local edits on the kiosk are reported back
 and can be pulled into a new version with "Use device state as draft" in
 the UI; they are overwritten by the next published version otherwise.

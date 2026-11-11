@@ -1,4 +1,4 @@
-/* Same tokens as dashboard/style.css so the two sites look like one family. */
+/* Design tokens for the config UI. */
 :root {
   color-scheme: light;
   --surface-1: #fcfcfb;

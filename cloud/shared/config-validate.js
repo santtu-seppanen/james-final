@@ -19,7 +19,7 @@ var settingsSchema = require('./settings-schema');
 
 var SCHEMA_VERSION = 1;
 var MAX_SLOTS = 6; // servos_config.json has 6 slots
-var SERVINGS = [25, 50]; // same options as the kiosk's BottleAdmin / remote-bottles.js
+var SERVINGS = [25, 50]; // same options as the kiosk's BottleAdmin
 var MAX_CAPACITY_ML = 5000;
 var MAX_RECIPES = 200;
 var MAX_INGREDIENTS = 10;

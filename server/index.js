@@ -30,13 +30,8 @@ var bottles = [];
 var recipes = {};
 const socketName = "servoState";
 // ****** Metrics variables ******
-// Kept locally in metrics.json (read by reporter.js, which polls it to the
-// public Cloudflare dashboard) - this used to also be pushed live over an
-// AWS API Gateway WebSocket to an older private dashboard and to handle
-// Alexa voice orders. Both were removed: the Pi now reports out on its own
-// schedule instead of needing a live inbound connection, and the Alexa
-// integration was already disabled (see the commented-out @reboot line in
-// crontab).
+// Kept locally in metrics.json (read by cloud-sync.js, which reports to the
+// cloud Worker on its own schedule, so no live inbound connection is needed).
 
 // First run against a fresh DATA_DIR (e.g. right after migrating to it):
 // seed bottles/recipes/available-bottles from the committed snapshot next
@@ -376,9 +371,7 @@ function sendBottlesUpdateDashboard() {
   metricsData.containers[1].controls[0].summaries = summary;
   metricsData.containers[1].controls[0].metrics = drinksSplits;
 
-  // metrics.json is the only thing written here now - reporter.js polls it
-  // and pushes to the public dashboard on its own schedule (see
-  // JAMES_DASHBOARD_URL / JAMES_REPORT_TOKEN in .env.example).
+  // metrics.json is the only thing written here; cloud-sync.js reads it.
   fs.writeFileSync(metricsPath, JSON.stringify(metricsData));
 }
 
