@@ -1,6 +1,7 @@
 name = "james-cloud"
 main = "src/index.js"
 compatibility_date = "2025-09-01"
+preview_urls = false
 
 # The config UI (public/) is served as static assets from the same Worker;
 # anything without a matching file (i.e. /api/*) falls through to src/index.js.
@@ -12,7 +13,7 @@ not_found_handling = "none"
 binding = "DB"
 database_name = "james-cloud"
 # Replace with the id printed by `wrangler d1 create james-cloud` (see README.md).
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "70df39a8-d7e4-4a17-a426-76933769d5ad"
 migrations_dir = "migrations"
 
 [vars]
