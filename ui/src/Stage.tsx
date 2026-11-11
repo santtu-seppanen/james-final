@@ -1,5 +1,6 @@
 import {useEffect, useState, type ReactNode} from 'react';
 import {PORTRAIT_ROTATION} from './config';
+import {StageRotation} from './stageRotation';
 
 function viewport() {
   return {w: window.innerWidth, h: window.innerHeight};
@@ -18,14 +19,22 @@ export function Stage({children}: {children: ReactNode}) {
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  if (vp.w <= vp.h) return <div className="stage">{children}</div>;
+  if (vp.w <= vp.h) {
+    return (
+      <StageRotation.Provider value={0}>
+        <div className="stage">{children}</div>
+      </StageRotation.Provider>
+    );
+  }
 
   const shift = PORTRAIT_ROTATION === 90 ? `translateX(${vp.w}px)` : `translateY(${vp.h}px)`;
   return (
-    <div
-      className="stage stage--rotated"
-      style={{width: vp.h, height: vp.w, transform: `${shift} rotate(${PORTRAIT_ROTATION}deg)`}}>
-      {children}
-    </div>
+    <StageRotation.Provider value={PORTRAIT_ROTATION}>
+      <div
+        className="stage stage--rotated"
+        style={{width: vp.h, height: vp.w, transform: `${shift} rotate(${PORTRAIT_ROTATION}deg)`}}>
+        {children}
+      </div>
+    </StageRotation.Provider>
   );
 }

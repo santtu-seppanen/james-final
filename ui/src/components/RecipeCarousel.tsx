@@ -1,4 +1,5 @@
-import {useLayoutEffect, useRef, useState} from 'react';
+import {useContext, useLayoutEffect, useRef, useState} from 'react';
+import {StageRotation} from '../stageRotation';
 import type {Recipe} from '../types';
 import {recipeImage} from '../images';
 import {drinkColor, rgbString} from '../drinkColor';
@@ -17,13 +18,18 @@ interface Props {
 // front drink is named, with its ingredients underneath. Whatever is in
 // front is what the Pour button serves.
 const MIN_SLOTS = 9; // keep it looking like a ring with only a few drinks
-const SWIPE_PX = 40;
+const PX_PER_DRINK = 90; // how far a finger drags the ring by one drink
+const TAP_SLOP_PX = 8;
 
 export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({w: 0, h: 0});
-  const dragStartX = useRef<number | null>(null);
-  const justSwiped = useRef(false);
+  const rotation = useContext(StageRotation);
+  // While a finger is down the ring follows it: `drag` is how many drinks it has been turned.
+  const [drag, setDrag] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const finger = useRef<{start: number; moved: boolean; turned: number} | null>(null);
+  const justDragged = useRef(false);
   const count = recipes.length;
   const hasCards = count > 0;
 
@@ -48,26 +54,42 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   }
 
   const front = ((index % count) + count) % count;
-  const turn = (by: number) => onIndex((((front + by) % count) + count) % count);
+  const position = front - drag; // fractional while dragging
   const step = (2 * Math.PI) / Math.max(count, MIN_SLOTS);
-  const imageSize = Math.min(size.w * 0.56, size.h * 0.62, 280);
+  const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
   const radiusX = size.w * 0.34;
   const radiusY = size.h * 0.2;
   const current = recipes[front];
 
+  // Along the portrait horizontal, whatever the screen is doing underneath.
+  const along = (e: React.PointerEvent) => (rotation === 90 ? e.clientY : rotation === 270 ? -e.clientY : e.clientX);
+
   function onPointerDown(e: React.PointerEvent) {
-    dragStartX.current = e.clientX;
+    finger.current = {start: along(e), moved: false, turned: 0};
   }
-  function onPointerUp(e: React.PointerEvent) {
-    const startX = dragStartX.current;
-    dragStartX.current = null;
-    if (startX === null) return;
-    const dx = e.clientX - startX;
-    if (Math.abs(dx) <= SWIPE_PX) return;
-    turn(dx < 0 ? 1 : -1);
-    // Swallow the click that follows a swipe.
-    justSwiped.current = true;
-    window.setTimeout(() => (justSwiped.current = false), 0);
+  function onPointerMove(e: React.PointerEvent) {
+    const f = finger.current;
+    if (!f) return;
+    const d = along(e) - f.start;
+    if (Math.abs(d) > TAP_SLOP_PX) f.moved = true;
+    if (f.moved) {
+      f.turned = d / PX_PER_DRINK;
+      setDragging(true);
+      setDrag(f.turned);
+    }
+  }
+  function onPointerEnd(commit: boolean) {
+    const f = finger.current;
+    finger.current = null;
+    if (!f) return;
+    if (f.moved) {
+      if (commit) onIndex((((Math.round(front - f.turned) % count) + count) % count));
+      // Swallow the click that follows a drag.
+      justDragged.current = true;
+      window.setTimeout(() => (justDragged.current = false), 0);
+    }
+    setDrag(0);
+    setDragging(false);
   }
 
   return (
@@ -76,12 +98,13 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
         className="orbit"
         ref={stage}
         onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerCancel={() => (dragStartX.current = null)}>
+        onPointerMove={onPointerMove}
+        onPointerUp={() => onPointerEnd(true)}
+        onPointerCancel={() => onPointerEnd(false)}>
         {size.w > 0 &&
           recipes.map((recipe, i) => {
             // Signed distance from the front, wrapped to the shorter way round.
-            let delta = i - front;
+            let delta = i - position;
             if (delta > count / 2) delta -= count;
             if (delta < -count / 2) delta += count;
             const angle = delta * step;
@@ -89,7 +112,7 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
             const x = Math.sin(angle) * radiusX;
             const y = (Math.cos(angle) - 0.35) * radiusY;
             const scale = 0.42 + 0.58 * depth;
-            const isFront = delta === 0;
+            const isFront = i === front;
             return (
               <button
                 key={recipe.name ?? recipe.friendlyname}
@@ -100,23 +123,17 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
                   transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) scale(${scale})`,
                   opacity: isFront ? 1 : 0.3 + 0.55 * depth,
                   zIndex: Math.round(depth * 100),
+                  transition: dragging ? 'none' : undefined,
                 }}
                 tabIndex={isFront ? -1 : 0}
                 onClick={() => {
-                  if (!justSwiped.current && !isFront) onIndex(i);
+                  if (!justDragged.current && !isFront) onIndex(i);
                 }}
                 aria-label={isFront ? recipe.friendlyname : `Show ${recipe.friendlyname}`}>
                 <img src={recipeImage(recipe)} alt="" draggable={false} />
               </button>
             );
           })}
-
-        <button className="carousel__arrow carousel__arrow--prev" onClick={() => turn(-1)} aria-label="Previous drink">
-          <Icon name="back" size={32} />
-        </button>
-        <button className="carousel__arrow carousel__arrow--next" onClick={() => turn(1)} aria-label="Next drink">
-          <Icon name="back" size={32} className="carousel__flip" />
-        </button>
       </div>
 
       <div className="orbit__info" aria-live="polite">

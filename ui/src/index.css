@@ -543,7 +543,7 @@ img {
   position: relative;
   flex: 1;
   min-height: 0;
-  touch-action: pan-y;
+  touch-action: none; /* the ring handles every drag itself */
   overflow: hidden;
 }
 
@@ -575,7 +575,7 @@ img {
 }
 
 .orbit__info {
-  padding: 4px 80px 10px;
+  padding: 4px 20px 10px;
   text-align: center;
 }
 
@@ -584,21 +584,21 @@ img {
 }
 
 .orbit__title {
-  font-size: 34px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1.1;
   color: var(--text);
 }
 
 .orbit__ingredients {
-  margin-top: 6px;
-  font-size: 20px;
+  margin-top: 4px;
+  font-size: 17px;
   color: var(--text-muted);
 }
 
 .orbit__fresh {
-  margin-top: 6px;
-  font-size: 16px;
+  margin-top: 4px;
+  font-size: 14px;
   color: var(--accent);
 }
 
@@ -613,36 +613,6 @@ img {
   width: 100%;
 }
 
-.carousel__arrow {
-  position: absolute;
-  bottom: 4px;
-  z-index: 200;
-  width: 64px;
-  height: 64px;
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.carousel__arrow--prev {
-  left: 8px;
-}
-
-.carousel__arrow--next {
-  right: 8px;
-}
-
-.carousel__arrow:active {
-  background: var(--surface-2);
-}
-
-.carousel__flip {
-  transform: scaleX(-1);
-}
 
 /* Bottle strip */
 .bottle-strip {
