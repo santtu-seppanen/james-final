@@ -9,8 +9,14 @@
 - `server/` — Node.js backend that runs on the Pi, drives the servos over
   GPIO (`servoblaster`), and persists bottle/recipe config as JSON files.
 - `scripts/deploy.sh` — runs on the Pi via cron. Pulls this repo, and on a
-  change: reinstalls/rebuilds both `server/` and `ui/`, deploys the built UI
-  to `/var/www/html`, and restarts the backend. See its own header comment.
+  change: reinstalls the backend deps, rebuilds `ui/` into `ui/build` (served
+  by the drink server itself) and restarts the `james` service. The kiosk
+  page notices the new version and reloads itself from the home screen.
+- `scripts/setup-pi.sh` — one-time, idempotent Pi setup: installs
+  `scripts/systemd/james.service` (drink server) and `kiosk.service`
+  (Chromium via `scripts/kiosk.sh`), both restarted automatically if they
+  die, and switches off services the kiosk doesn't use (Apache, Bluetooth,
+  CUPS, VNC, ...). Originals are kept as `*.bak-james`.
 - `cloud/` — Cloudflare Worker + D1 holding the device's **configuration**
   (bottles, recipes, LED/sound/show settings) as a version history, plus the
   Pi's stats, and serving the config UI. `server/cloud-sync.js` on the Pi
