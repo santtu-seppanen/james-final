@@ -4,21 +4,20 @@ import io, {type Socket} from 'socket.io-client';
 import type {Bottle, PourResult, Recipe, ServoStateEvent} from './types';
 import {API_BASE, getBottles, getRecipes, saveRecipe} from './api';
 import {useIdle} from './hooks';
-import {useSettings} from './settings';
+import {DONE_SECONDS, IDLE_SECONDS} from './config';
 import {recordPour} from './stats';
 import {HomeScreen} from './components/HomeScreen';
 import {ConfirmScreen} from './components/ConfirmScreen';
 import {PouringScreen} from './components/PouringScreen';
 import {DoneScreen} from './components/DoneScreen';
 import {AttractScreen} from './components/AttractScreen';
-import {AdminScreen} from './components/admin/AdminScreen';
 import {VersionBanner} from './components/VersionBanner';
 import {LoadingScreen, LockedScreen, OfflineScreen} from './components/SystemStates';
 
 // Guest flow: attract <-> home -> confirm -> pouring -> done -> home.
-// admin hangs off home behind the PIN. locked/offline/loading are
-// overlays decided below the switch, so any screen can fall into them.
-type View = 'home' | 'confirm' | 'pouring' | 'done' | 'attract' | 'admin';
+// locked/offline/loading are overlays decided below the switch, so any
+// screen can fall into them.
+type View = 'home' | 'confirm' | 'pouring' | 'done' | 'attract';
 
 // How long the socket may be down before we admit the backend is gone -
 // deploy.sh restarts it in well under this, and a flash of "offline"
@@ -29,14 +28,14 @@ export default function App() {
   const [view, setView] = useState<View>('home');
   const [bottles, setBottles] = useState<Bottle[]>([]);
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [servos, setServos] = useState<boolean[]>(new Array(8).fill(false));
+  const [servos, setServos] = useState<boolean[]>(new Array(6).fill(false));
   const [loaded, setLoaded] = useState(false);
   const [offline, setOffline] = useState(false);
   const [locked, setLocked] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<Recipe | null>(null);
   const [isAiDrink, setIsAiDrink] = useState(false);
   const [pour, setPour] = useState<{result: PourResult; show: boolean} | null>(null);
-  const [settings, updateSettings] = useSettings();
+  const [savedAs, setSavedAs] = useState<string | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -79,8 +78,8 @@ export default function App() {
     };
   }, []);
 
-  // Attract mode only from the menu - never mid-pour or inside admin.
-  useIdle(settings.idleSeconds, view === 'home', () => setView('attract'));
+  // Attract mode only from the menu - never mid-pour.
+  useIdle(IDLE_SECONDS, view === 'home', () => setView('attract'));
 
   function selectRecipe(recipe: Recipe, ai: boolean) {
     setSelectedDrink(recipe);
@@ -90,6 +89,7 @@ export default function App() {
 
   function goHome() {
     setSelectedDrink(null);
+    setSavedAs(null);
     setPour(null);
     setView('home');
   }
@@ -97,13 +97,19 @@ export default function App() {
   function pourStarted(result: PourResult, show: boolean) {
     setPour({result, show});
     setView('pouring');
-    if (selectedDrink) recordPour(selectedDrink, bottles);
-  }
-
-  async function handleSaveDrink(name: string) {
     if (!selectedDrink) return;
-    const result = await saveRecipe(name, selectedDrink);
-    setRecipes((prev) => [...prev, {...selectedDrink, name: result.id, friendlyname: result.friendlyname}]);
+    recordPour(selectedDrink, bottles);
+    // Serving an AI drink is accepting it: it goes on the menu too. A
+    // failed save never gets in the way of the pour that already started.
+    if (isAiDrink) {
+      const drink = selectedDrink;
+      saveRecipe(drink.friendlyname, drink)
+        .then((saved) => {
+          setRecipes((prev) => [...prev, {...drink, name: saved.id, friendlyname: saved.friendlyname}]);
+          setSavedAs(saved.friendlyname);
+        })
+        .catch(() => setSavedAs(null));
+    }
   }
 
   if (locked) {
@@ -118,19 +124,6 @@ export default function App() {
 
   if (!loaded) {
     return <LoadingScreen />;
-  }
-
-  if (view === 'admin') {
-    return (
-      <AdminScreen
-        bottles={bottles}
-        recipes={recipes}
-        servos={servos}
-        settings={settings}
-        onSettings={updateSettings}
-        onBack={goHome}
-      />
-    );
   }
 
   if (view === 'attract') {
@@ -163,9 +156,8 @@ export default function App() {
     return (
       <DoneScreen
         recipe={selectedDrink}
-        canSave={isAiDrink}
-        autoReturnSeconds={settings.doneSeconds}
-        onSave={handleSaveDrink}
+        savedAs={savedAs}
+        autoReturnSeconds={DONE_SECONDS}
         onHome={goHome}
       />
     );
@@ -174,7 +166,7 @@ export default function App() {
   return (
     <>
       <VersionBanner />
-      <HomeScreen bottles={bottles} recipes={recipes} onSelect={selectRecipe} onAdmin={() => setView('admin')} />
+      <HomeScreen bottles={bottles} recipes={recipes} onSelect={selectRecipe} />
     </>
   );
 }

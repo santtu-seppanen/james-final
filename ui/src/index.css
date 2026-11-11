@@ -297,22 +297,6 @@ img {
   background: var(--surface-2);
 }
 
-.admin-corner {
-  position: fixed;
-  right: 12px;
-  bottom: 12px;
-  width: var(--touch);
-  height: var(--touch);
-  border-radius: 50%;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 5;
-}
-
 /* Segmented control (strength, ranges) */
 .segmented {
   display: inline-flex;
@@ -510,16 +494,9 @@ img {
    Home
    ------------------------------------------------------------------------ */
 .home {
-  display: grid;
-  grid-template-columns: 136px 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-}
-
-.home__bottles {
-  padding: 12px 8px;
-  border-right: 1px solid var(--border);
-  background: var(--surface);
-  overflow: hidden;
 }
 
 .home__main {
@@ -534,7 +511,6 @@ img {
   gap: var(--gap);
   align-items: center;
   padding-bottom: 14px;
-  padding-right: 72px; /* clear of the admin corner on narrow panels */
 }
 
 .home__queue {
@@ -545,18 +521,97 @@ img {
   align-items: center;
 }
 
-.home__grid {
+/* Menu carousel: swipeable row of big cards with arrow buttons. */
+.carousel {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  scrollbar-width: none;
-  padding-bottom: 80px; /* room for the admin corner */
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
-  mask-image: linear-gradient(to bottom, #000 calc(100% - 48px), transparent);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 16px;
 }
 
-.home__grid::-webkit-scrollbar {
+.carousel__track {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding: 0 4px;
+}
+
+.carousel__track::-webkit-scrollbar {
   display: none;
+}
+
+.carousel__card {
+  flex: 0 0 min(300px, 62%);
+  scroll-snap-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+  transition: transform 0.08s ease, border-color 0.15s ease;
+}
+
+.carousel__card:active {
+  transform: scale(0.97);
+  border-color: var(--drink);
+}
+
+.carousel__art {
+  width: 100%;
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  background: radial-gradient(circle at 50% 60%, var(--drink-soft, rgba(27, 149, 224, 0.2)), transparent 70%);
+}
+
+.carousel__art img {
+  width: 170px;
+  height: 170px;
+  object-fit: contain;
+  border-radius: 10px;
+  filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
+}
+
+.carousel__name {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text);
+}
+
+.carousel__arrow {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.carousel__arrow:active {
+  background: var(--surface-2);
+}
+
+.carousel__flip {
+  transform: scaleX(-1);
 }
 
 /* Bottle strip */
@@ -688,12 +743,6 @@ img {
 }
 
 /* Recipe grid */
-.recipe-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
-  gap: 14px;
-}
-
 .recipe-card {
   display: flex;
   flex-direction: column;

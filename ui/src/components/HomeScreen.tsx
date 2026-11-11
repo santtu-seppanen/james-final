@@ -3,18 +3,16 @@ import type {Bottle, Recipe} from '../types';
 import {generateAiDrink} from '../api';
 import {availability} from '../drinkColor';
 import {features} from '../features';
-import {BottleStrip} from './BottleStrip';
-import {RecipeGrid} from './RecipeGrid';
+import {RecipeCarousel} from './RecipeCarousel';
 import {Icon} from './Icon';
 
 interface Props {
   bottles: Bottle[];
   recipes: Recipe[];
   onSelect: (recipe: Recipe, isAi: boolean) => void;
-  onAdmin: () => void;
 }
 
-export function HomeScreen({bottles, recipes, onSelect, onAdmin}: Props) {
+export function HomeScreen({bottles, recipes, onSelect}: Props) {
   const [aiState, setAiState] = useState<'idle' | 'thinking' | 'failed'>('idle');
   const [aiError, setAiError] = useState('');
   // Cancelling just ignores the answer when it arrives - the request
@@ -51,10 +49,6 @@ export function HomeScreen({bottles, recipes, onSelect, onAdmin}: Props) {
 
   return (
     <div className="home">
-      <aside className="home__bottles">
-        <BottleStrip bottles={bottles} />
-      </aside>
-
       <main className="home__main">
         <div className="home__top">
           <button
@@ -78,14 +72,8 @@ export function HomeScreen({bottles, recipes, onSelect, onAdmin}: Props) {
           )}
         </div>
 
-        <div className="home__grid">
-          <RecipeGrid recipes={recipes} bottles={bottles} onSelect={(r) => onSelect(r, false)} />
-        </div>
+        <RecipeCarousel recipes={pourable} bottles={bottles} onSelect={(r) => onSelect(r, false)} />
       </main>
-
-      <button className="admin-corner" onClick={onAdmin} aria-label="Admin and maintenance">
-        <Icon name="cog" size={26} />
-      </button>
 
       {aiState !== 'idle' && (
         <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="AI drink">
