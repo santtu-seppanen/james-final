@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>James config</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="page-header">
+        <h1>James <span class="page-header__sub">config</span></h1>
+        <div class="page-header__right">
+          <div id="status-badge" class="status-badge status-badge--unknown">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text">…</span>
+          </div>
+          <button type="button" id="auth-toggle" class="btn btn--ghost">Sign in</button>
+        </div>
+      </header>
+
+      <p id="global-notice" class="notice" hidden></p>
+      <div id="offline-banner" class="banner banner--warning" hidden></div>
+      <div id="pending-banner" class="banner banner--info" hidden></div>
+
+      <section id="signed-out" class="panel" hidden>
+        <h2>Sign in</h2>
+        <p class="notice">Enter the admin token (the Worker's <code>ADMIN_TOKEN</code> secret). It is kept in this tab only.</p>
+        <form id="auth-form" class="inline-form">
+          <input type="password" id="auth-token" autocomplete="current-password" placeholder="Admin token" required />
+          <button type="submit" class="btn">Sign in</button>
+        </form>
+        <p id="auth-error" class="notice notice--error" hidden></p>
+      </section>
+
+      <div id="app" hidden>
+        <nav class="tabs" role="tablist" aria-label="Sections">
+          <button type="button" class="tab" data-tab="device" role="tab">Device</button>
+          <button type="button" class="tab" data-tab="bottles" role="tab">Bottles</button>
+          <button type="button" class="tab" data-tab="recipes" role="tab">Recipes</button>
+          <button type="button" class="tab" data-tab="settings" role="tab">Settings</button>
+          <button type="button" class="tab" data-tab="versions" role="tab">Versions</button>
+        </nav>
+
+        <!-- Device -->
+        <section class="tab-panel" data-panel="device" role="tabpanel">
+          <div class="stat-row" aria-label="Device status">
+            <div class="stat-tile"><div class="stat-tile__value" id="d-lastseen">–</div><div class="stat-tile__label">Last check-in</div></div>
+            <div class="stat-tile"><div class="stat-tile__value" id="d-uptime">–</div><div class="stat-tile__label">Uptime</div></div>
+            <div class="stat-tile"><div class="stat-tile__value" id="d-drinks">–</div><div class="stat-tile__label">Drinks served</div></div>
+            <div class="stat-tile"><div class="stat-tile__value" id="d-alcohol">–</div><div class="stat-tile__label">Alcohol poured</div></div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Device</h2>
+              <span class="panel-actions"><button type="button" id="import-device" class="btn btn--ghost btn--small">Use device state as draft</button></span>
+            </div>
+            <dl class="kv" id="d-info"></dl>
+          </div>
+
+          <div class="panel">
+            <h2>Bottles on the device</h2>
+            <ul id="d-bottles" class="bottle-list"></ul>
+          </div>
+
+          <div class="two-col">
+            <div class="panel">
+              <h2>Top drinks <span class="muted" id="stats-window"></span></h2>
+              <ol id="d-top" class="plain-list"></ol>
+            </div>
+            <div class="panel">
+              <h2>Errors</h2>
+              <ul id="d-errors" class="plain-list"></ul>
+            </div>
+          </div>
+
+          <div class="panel">
+            <h2>Recent pours</h2>
+            <table class="table"><thead><tr><th>Drink</th><th>Alcohol</th><th>When</th></tr></thead><tbody id="d-pours"></tbody></table>
+          </div>
+        </section>
+
+        <!-- Bottles -->
+        <section class="tab-panel" data-panel="bottles" role="tabpanel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Slots</h2>
+              <span class="panel-actions"><button type="button" id="add-slot" class="btn btn--ghost btn--small">Add slot</button></span>
+            </div>
+            <p class="notice">Slot order = servo order on the device. Changing the bottle or its capacity counts as a refill (fill level resets to full); use <em>Refilled</em> to reset the level without changing anything else.</p>
+            <div id="slot-list" class="slot-list"></div>
+          </div>
+          <div class="panel">
+            <h2>Available bottles</h2>
+            <p class="notice">Names the slot and ingredient pickers offer. Must include every loaded bottle.</p>
+            <div id="available-chips" class="chips"></div>
+            <form id="available-form" class="inline-form">
+              <input type="text" id="available-name" placeholder="New bottle name" maxlength="40" pattern="[A-Za-z0-9 _&amp;\(\)\.\+'\-]+" required />
+              <button type="submit" class="btn btn--ghost">Add</button>
+            </form>
+          </div>
+        </section>
+
+        <!-- Recipes -->
+        <section class="tab-panel" data-panel="recipes" role="tabpanel" hidden>
+          <div class="panel">
+            <div class="panel-heading">
+              <h2>Recipes</h2>
+              <span class="panel-actions"><button type="button" id="add-recipe" class="btn">Add drink</button></span>
+            </div>
+            <div id="recipe-grid" class="recipe-grid"></div>
+          </div>
+        </section>
+
+        <!-- Settings -->
+        <section class="tab-panel" data-panel="settings" role="tabpanel" hidden>
+          <div id="settings-sections"></div>
+        </section>
+
+        <!-- Versions -->
+        <section class="tab-panel" data-panel="versions" role="tabpanel" hidden>
+          <div class="panel">
+            <h2>Version history</h2>
+            <p class="notice">Every publish is a new version. Rolling back publishes the old content as a new version, so nothing is ever lost.</p>
+            <ul id="version-list" class="version-list"></ul>
+          </div>
+        </section>
+      </div>
+
+      <div id="publish-bar" class="publish-bar" hidden>
+        <div class="publish-bar__inner">
+          <span id="publish-status" class="publish-bar__status">Unsaved changes</span>
+          <input type="text" id="publish-note" placeholder="Note (optional)" maxlength="200" />
+          <button type="button" id="discard" class="btn btn--ghost">Discard</button>
+          <button type="button" id="publish" class="btn">Publish</button>
+        </div>
+        <ul id="publish-errors" class="publish-bar__errors" hidden></ul>
+      </div>
+
+      <dialog id="recipe-dialog" class="dialog">
+        <form id="recipe-form" method="dialog">
+          <h3 id="recipe-dialog-title">Drink</h3>
+          <label class="field">Name
+            <input type="text" id="recipe-name" maxlength="60" required />
+          </label>
+          <label class="field">Id <span class="muted">(stable, used by the kiosk)</span>
+            <input type="text" id="recipe-id" maxlength="64" pattern="[A-Za-z0-9_\-]+" required />
+          </label>
+          <label class="field">Image
+            <input type="text" id="recipe-image" list="image-names" maxlength="100" placeholder="humppaleka" />
+            <datalist id="image-names"></datalist>
+          </label>
+          <div class="field">Ingredients <span class="muted">(ml; "wait" delays the pour by N cycles)</span></div>
+          <div id="ingredient-rows"></div>
+          <button type="button" id="add-ingredient" class="btn btn--ghost btn--small">+ Ingredient</button>
+          <p id="recipe-error" class="notice notice--error" hidden></p>
+          <div class="dialog__buttons">
+            <button type="button" id="recipe-cancel" class="btn btn--ghost">Cancel</button>
+            <button type="submit" class="btn">OK</button>
+          </div>
+        </form>
+      </dialog>
+
+      <dialog id="version-dialog" class="dialog dialog--wide">
+        <h3 id="version-dialog-title">Version</h3>
+        <dl class="kv" id="version-meta"></dl>
+        <h4>Changes compared to the current version</h4>
+        <ul id="version-diff" class="plain-list"></ul>
+        <details><summary>Full JSON</summary><pre id="version-json" class="json"></pre></details>
+        <div class="dialog__buttons">
+          <button type="button" id="version-close" class="btn btn--ghost">Close</button>
+          <button type="button" id="version-load" class="btn btn--ghost">Load into draft</button>
+          <button type="button" id="version-rollback" class="btn">Roll back to this</button>
+        </div>
+      </dialog>
+
+      <footer class="page-footer">
+        <a href="https://github.com/santtu-seppanen/james-final">Source on GitHub</a>
+      </footer>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
