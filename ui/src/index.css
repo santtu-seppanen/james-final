@@ -521,56 +521,57 @@ img {
   align-items: center;
 }
 
-/* Menu carousel: swipeable row of big cards with arrow buttons. */
+/* Menu carousel: a ring of cards, the chosen drink in front. */
 .carousel {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-bottom: 16px;
+  position: relative;
+  padding-bottom: 8px;
 }
 
-.carousel__track {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-  padding: 0 4px;
+.ring {
+  position: absolute;
+  inset: 0;
+  touch-action: pan-y;
+  overflow: hidden;
 }
 
-.carousel__track::-webkit-scrollbar {
-  display: none;
-}
-
-.carousel__card {
-  flex: 0 0 min(300px, 62%);
-  scroll-snap-align: center;
+.ring__card {
+  position: absolute;
+  left: 50%;
+  top: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 18px 16px 20px;
+  padding: 16px 14px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   text-align: center;
-  transition: transform 0.08s ease, border-color 0.15s ease;
+  transition: transform 0.4s ease, opacity 0.4s ease;
 }
 
-.carousel__card:active {
-  transform: scale(0.97);
+.ring__card--front {
   border-color: var(--drink);
+  box-shadow: 0 0 36px -8px var(--drink);
+}
+
+.ring__details {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.ring__card--front .ring__details {
+  display: flex;
 }
 
 .carousel__art {
   width: 100%;
-  height: 190px;
+  height: 160px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -579,22 +580,24 @@ img {
 }
 
 .carousel__art img {
-  width: 170px;
-  height: 170px;
+  width: 140px;
+  height: 140px;
   object-fit: contain;
   border-radius: 10px;
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.5));
 }
 
 .carousel__name {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
   line-height: 1.1;
   color: var(--text);
 }
 
 .carousel__arrow {
-  flex: 0 0 auto;
+  position: absolute;
+  bottom: 8px;
+  z-index: 200;
   width: 64px;
   height: 64px;
   border-radius: 50%;
@@ -604,6 +607,14 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+.carousel__arrow--prev {
+  left: 8px;
+}
+
+.carousel__arrow--next {
+  right: 8px;
 }
 
 .carousel__arrow:active {
@@ -2222,4 +2233,17 @@ img {
     width: 88px;
     height: 88px;
   }
+}
+
+/* Portrait stage (see Stage.tsx): fills the viewport, or a turned box. */
+.stage {
+  height: 100%;
+  overflow: hidden;
+}
+
+.stage--rotated {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
 }
