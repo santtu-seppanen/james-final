@@ -73,7 +73,7 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
   return (
     <div className="carousel">
       <div
-        className="ring"
+        className="orbit"
         ref={stage}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
@@ -93,7 +93,7 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
             return (
               <button
                 key={recipe.name ?? recipe.friendlyname}
-                className={`ring__card${front ? ' ring__card--front' : ''}`}
+                className={`orbit__card${front ? ' orbit__card--front' : ''}`}
                 style={{
                   ['--drink' as string]: rgbString(drinkColor(recipe)),
                   width: cardW,
@@ -113,7 +113,7 @@ export function RecipeCarousel({recipes, onSelect}: Props) {
           })}
       </div>
 
-      <p className="ring__title" aria-live="polite">
+      <p className="orbit__title" aria-live="polite">
         {recipes[index].friendlyname}
       </p>
 

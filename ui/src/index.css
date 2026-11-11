@@ -530,16 +530,16 @@ img {
   padding-bottom: 8px;
 }
 
-/* The ring is just the drink pictures - no cards, no frames. Only the
-   drink in front gets a name (.ring__title). */
-.ring {
+/* The orbit is just the drink pictures - no cards, no frames. Only the
+   drink in front gets a name (.orbit__title). */
+.orbit {
   position: absolute;
   inset: 0 0 104px 0;
   touch-action: pan-y;
   overflow: hidden;
 }
 
-.ring__card {
+.orbit__card {
   position: absolute;
   left: 50%;
   top: 50%;
@@ -550,20 +550,23 @@ img {
   transition: transform 0.4s ease, opacity 0.4s ease;
 }
 
-.ring__card img {
+.orbit__card img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  border-radius: 12px;
+  /* Some drink pictures are JPGs with a white background: feather the
+     edges so they read as a glass floating in the dark, not a photo frame. */
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
+  mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
   filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
   pointer-events: none;
 }
 
-.ring__card--front img {
+.orbit__card--front img {
   filter: drop-shadow(0 0 28px var(--drink)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
 }
 
-.ring__title {
+.orbit__title {
   position: absolute;
   left: 80px;
   right: 80px;
