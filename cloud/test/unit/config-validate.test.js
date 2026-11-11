@@ -48,6 +48,14 @@ test('rejects bottles not in availableBottles and bad servings', () => {
   assert.match(result.errors.join('\n'), /bottles\[2\]\.capacity/);
 });
 
+test('rejects more bottle slots than the device has servos', () => {
+  const cfg = goodConfig();
+  while (cfg.bottles.length <= validate.MAX_SLOTS) cfg.bottles.push({...cfg.bottles[0]});
+  const result = validateConfig(cfg);
+  assert.equal(result.ok, false);
+  assert.match(result.errors.join('\n'), /1-6 slots/);
+});
+
 test('rejects recipe ingredients that are not a multiple of the loaded bottle pour size', () => {
   const cfg = goodConfig();
   cfg.recipes.vodkatonic.ingredients[0].serving = 30;

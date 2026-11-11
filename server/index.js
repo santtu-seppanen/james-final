@@ -415,7 +415,7 @@ function resetServos() {
   exec('echo "0" > /sys/class/gpio/export');
   exec('echo "out" > /sys/class/gpio/gpio0/direction');
 
-  for (var i = 0; i < 8; i++) {
+  for (var i = 0; i < Object.keys(servos).length; i++) {
     const servoGpio = servos[i];
     const command =
       'echo "' + servoGpio + '=140" | sudo tee /dev/servoblaster > /dev/null';

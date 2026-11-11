@@ -437,7 +437,7 @@
     var list = $('slot-list');
     list.innerHTML = '';
     var device = state.overview && state.overview.device;
-    var maxSlots = state.schema ? state.schema.maxSlots : 8;
+    var maxSlots = state.schema ? state.schema.maxSlots : 6;
     $('add-slot').disabled = draft.bottles.length >= maxSlots;
 
     if (!draft.bottles.length) list.innerHTML = '<p class="empty-state">No slots. Add one per servo (the device has ' + maxSlots + ').</p>';
