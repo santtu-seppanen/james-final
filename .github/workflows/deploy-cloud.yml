@@ -1,10 +1,9 @@
 name: Deploy cloud Worker
 
-# Tests run on every push touching cloud/. The deploy job is opt-in: it only
-# runs once the repo variable CLOUD_DEPLOY_ENABLED is set to "true" (after the
-# one-time setup in cloud/README.md: real database_id in wrangler.toml,
-# DEVICE_TOKEN / ADMIN_TOKEN Worker secrets). Until then nothing is deployed
-# even though the CLOUDFLARE_* secrets already exist for the dashboard.
+# Every push to main touching cloud/ runs the tests and, if they pass,
+# applies D1 migrations and deploys the Worker. Needs the CLOUDFLARE_API_TOKEN
+# (Workers Scripts:Edit, D1:Edit) and CLOUDFLARE_ACCOUNT_ID repo secrets; the
+# DEVICE_TOKEN / ADMIN_TOKEN Worker secrets are set once with wrangler.
 
 on:
   push:
@@ -36,7 +35,6 @@ jobs:
 
   deploy:
     needs: test
-    if: vars.CLOUD_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

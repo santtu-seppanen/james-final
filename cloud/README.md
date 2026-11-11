@@ -126,12 +126,11 @@ First publish: open the UI, sign in, wait for the Pi's first report, then
 "Use device state as draft" → Publish. That v1 equals what the Pi already
 has, so applying it changes nothing.
 
-GitHub Actions: `.github/workflows/deploy-cloud.yml` runs the tests on pushes
-to `main` touching `cloud/`. Deploying (migrations + `wrangler deploy`, with
-the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets) is opt-in: set the repository **variable**
-`CLOUD_DEPLOY_ENABLED=true` (Settings → Secrets and variables → Actions →
-Variables) once the one-time setup above is done. The API token needs
-Workers Scripts:Edit and D1:Edit on the account.
+GitHub Actions: `.github/workflows/deploy-cloud.yml` runs the tests on every
+push to `main` touching `cloud/` and, if they pass, applies the D1 migrations
+and runs `wrangler deploy` (the Worker publish to Cloudflare), using the
+`CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. The API token
+needs Workers Scripts:Edit and D1:Edit on the account.
 
 ## Local dev
 
