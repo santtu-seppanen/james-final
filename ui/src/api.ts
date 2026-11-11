@@ -44,12 +44,14 @@ export function setRecipes(recipes: Recipe[]): Promise<Recipe[]> {
   return postJson('/setRecipes', recipes);
 }
 
-export function pourByName(drinkName: string): Promise<PourResult> {
-  return postJson('/drinkme', {drink: drinkName});
+// `show` is only sent when true - the backend ignores it until show mode
+// exists (issue #4), and src/features.ts keeps the button hidden till then.
+export function pourByName(drinkName: string, show = false): Promise<PourResult> {
+  return postJson('/drinkme', show ? {drink: drinkName, show: true} : {drink: drinkName});
 }
 
-export function pourAdHoc(recipe: Recipe): Promise<PourResult> {
-  return postJson('/drinkme', {recipe});
+export function pourAdHoc(recipe: Recipe, show = false): Promise<PourResult> {
+  return postJson('/drinkme', show ? {recipe, show: true} : {recipe});
 }
 
 export function generateAiDrink(): Promise<Recipe> {

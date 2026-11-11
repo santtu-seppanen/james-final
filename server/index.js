@@ -256,6 +256,8 @@ app.post("/api/save-recipe", (req, res) => {
     friendlyname: name,
     ingredients: recipe.ingredients,
     imageUrl: recipe.imageUrl || "humppaleka",
+    garnish: recipe.garnish,
+    color: recipe.color,
   };
   fs.writeFileSync(recipesConfig, JSON.stringify(recipes));
 
@@ -433,10 +435,16 @@ function formatRecipes(recipes) {
   let formattedRecipes = {};
 
   recipes.forEach((recipe) => {
+    // garnish and color are optional extras set from the kiosk's admin
+    // Recipes tab (what to add by hand after pouring, and an override for
+    // the colour the pouring screen / lights use). JSON.stringify drops
+    // them again when undefined, so old recipes stay byte-identical.
     formattedRecipes[recipe.name] = {
       friendlyname: recipe.friendlyname,
       ingredients: recipe.ingredients,
       imageUrl: recipe.imageUrl,
+      garnish: recipe.garnish,
+      color: recipe.color,
     };
   });
 
@@ -512,6 +520,8 @@ function getDrinks(filterBottles) {
           friendlyname: value.friendlyname,
           ingredients: value.ingredients,
           imageUrl: value.imageUrl,
+          garnish: value.garnish,
+          color: value.color,
         });
       }
     }
