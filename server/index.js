@@ -30,7 +30,7 @@ var bottles = [];
 var recipes = {};
 const socketName = "servoState";
 // ****** Metrics variables ******
-// Kept locally in metrics.json (read by cloud-sync.js, which reports to the
+// Kept locally in metrics.json (read by the separate cloud sync process, which reports to the
 // cloud Worker on its own schedule, so no live inbound connection is needed).
 
 // First run against a fresh DATA_DIR (e.g. right after migrating to it):
@@ -371,7 +371,7 @@ function sendBottlesUpdateDashboard() {
   metricsData.containers[1].controls[0].summaries = summary;
   metricsData.containers[1].controls[0].metrics = drinksSplits;
 
-  // metrics.json is the only thing written here; cloud-sync.js reads it.
+  // metrics.json is the only thing written here; the cloud sync process reads it.
   fs.writeFileSync(metricsPath, JSON.stringify(metricsData));
 }
 
