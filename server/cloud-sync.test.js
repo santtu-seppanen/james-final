@@ -62,6 +62,8 @@ function metrics(drinksServed, alcohol, splits) {
   };
 }
 
+const BACKOFF_MAX = 15 * 60 * 1000;
+
 let dataDir;
 let serverDir;
 let cloud;
@@ -196,6 +198,47 @@ describe('config sync', () => {
     expect(readJson('bottles_config.json')[0].capacity).toBe(650);
   });
 
+  it('does not refill when rolling back past a version without the stamp and forward again', async () => {
+    const stamped = (version, refilledAt) =>
+      publishedConfig(version, {bottles: [Object.assign({name: 'vodka', serving: 25, capacity: 700}, refilledAt ? {refilledAt} : {}), {name: 'empty', serving: 50, capacity: 1000}]});
+    const cycleWith = (response) => {
+      cloud.on('/api/device/config', response);
+      cloud.on('/api/version', {status: 200, body: {}});
+      cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
+    };
+    const pour = (capacity) =>
+      writeJson('bottles_config.json', [{name: 'vodka', serving: 25, capacity, originalCapacity: 700}, {name: 'empty', serving: 50, capacity: 1000, originalCapacity: 1000}]);
+
+    cycleWith(stamped(5, '2026-11-10T11:00:00Z'));
+    await makeClient().runOnce();
+    expect(readJson('bottles_config.json')[0].capacity).toBe(700);
+    pour(600);
+
+    cycleWith(stamped(6, null)); // rollback to a version from before the refill
+    await makeClient().runOnce();
+    expect(readJson('bottles_config.json')[0].capacity).toBe(600);
+
+    cycleWith(stamped(7, '2026-11-10T11:00:00Z')); // and forward again: same old stamp
+    await makeClient().runOnce();
+    expect(readJson('bottles_config.json')[0].capacity).toBe(600);
+
+    cycleWith(stamped(8, '2026-11-10T11:30:00Z')); // a newer stamp is a real refill
+    await makeClient().runOnce();
+    expect(readJson('bottles_config.json')[0].capacity).toBe(700);
+  });
+
+  it('refuses a response with a malformed etag (it would be sent back as a header)', async () => {
+    const bad = publishedConfig(3);
+    bad.body.etag = '"v3"\r\nx-evil: 1';
+    cloud.on('/api/device/config', bad);
+    cloud.on('/api/version', {status: 200, body: {}});
+    const client = makeClient();
+    const summary = await client.runOnce();
+    expect(summary.error).toMatch(/malformed/);
+    expect(client.getState().etag).toBeNull();
+    expect(readJson('recipes_config.json').old).toBeDefined();
+  });
+
   it('fetches again when the stats reply names a newer version', async () => {
     cloud.on('/api/device/config', {status: 304, body: null}, publishedConfig(7));
     cloud.on('/api/version', {status: 200, body: {}});
@@ -261,6 +304,61 @@ describe('offline behaviour', () => {
     expect(stats.deviceVersion).toBe('abc1234');
   });
 
+  it('never throws and never touches the drink files, whatever the cloud does', async () => {
+    const names = ['bottles_config.json', 'recipes_config.json', 'available_bottles_config.json', 'metrics.json'];
+    const snapshot = () => names.map((n) => fs.readFileSync(path.join(dataDir, n), 'utf8'));
+    const before = snapshot();
+    const failures = [
+      () => { throw new Error('getaddrinfo ENOTFOUND'); }, // synchronous throw
+      () => Promise.reject(new Error('network timeout at: https://cloud.test/api/device/config')),
+      () => Promise.resolve({status: 500, ok: false, json: () => Promise.resolve({})}),
+      () => Promise.resolve({status: 200, ok: true, json: () => Promise.reject(new SyntaxError('Unexpected token <'))}),
+      () => Promise.resolve({status: 200, ok: true, json: () => Promise.resolve(null)}),
+    ];
+    for (const fail of failures) {
+      const client = createSyncClient({dataDir, serverDir, cloudUrl: 'https://cloud.test', token: 't', fetch: fail, log: () => {}, now: () => clock});
+      const summary = await client.runOnce();
+      expect(summary.error).toEqual(expect.any(String));
+      expect(snapshot()).toEqual(before);
+      clock += BACKOFF_MAX;
+    }
+  });
+
+  it('keeps looping in daemon mode while the cloud is down', async () => {
+    jest.useFakeTimers();
+    try {
+      let calls = 0;
+      const client = createSyncClient({
+        dataDir, serverDir, cloudUrl: 'https://cloud.test', token: 't', log: () => {}, now: () => Date.now(),
+        fetch: () => { calls++; return Promise.reject(new Error('ECONNREFUSED')); },
+      });
+      const stop = client.start(1000);
+      for (let i = 0; i < 5; i++) {
+        await jest.advanceTimersByTimeAsync(BACKOFF_MAX);
+      }
+      stop();
+      expect(calls).toBeGreaterThanOrEqual(5);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('is a separate process: the drink server does not load it', () => {
+    const index = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+    expect(index).not.toMatch(/cloud-sync/);
+  });
+
+  it('refuses to send the token over plain http (except localhost)', async () => {
+    const insecure = createSyncClient({dataDir, serverDir, cloudUrl: 'http://james-cloud.example.workers.dev', token: 't', fetch: cloud.fetch, log: () => {}});
+    expect(await insecure.runOnce()).toEqual({skipped: true});
+    expect(cloud.calls.length).toBe(0);
+
+    cloud.on('/api/device/config', {status: 304, body: null});
+    cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
+    const local = createSyncClient({dataDir, serverDir, cloudUrl: 'http://localhost:8787', token: 't', fetch: cloud.fetch, log: () => {}, now: () => clock});
+    expect((await local.runOnce()).reported).toBe(true);
+  });
+
   it('skips silently when not configured', async () => {
     const client = createSyncClient({dataDir, serverDir, cloudUrl: '', token: '', fetch: cloud.fetch, log: () => {}});
     expect(await client.runOnce()).toEqual({skipped: true});
@@ -319,5 +417,48 @@ describe('stats', () => {
     expect(lastStats().pours).toEqual([{recipeId: 'x', friendlyName: 'X', alcoholMl: 50, ingredients: [{name: 'vodka', ml: 50}], pouredAt: '2026-11-10T11:45:00Z'}]);
     await makeClient().runOnce();
     expect(lastStats().pours).toEqual([]);
+  });
+
+  it('does not lose pours made while the cloud is down', async () => {
+    const file = path.join(dataDir, 'pours.jsonl');
+    fs.writeFileSync(file, JSON.stringify({ts: '2026-11-10T11:30:00Z', recipeId: 'old', friendlyname: 'Old drink', alcoholMl: 25}) + '\n');
+    cloud.on('/api/device/config', {status: 304, body: null}, {status: 304, body: null});
+    cloud.on('/api/version', {status: 200, body: {}}, {status: 200, body: {}});
+    cloud.on('/api/device/stats', {status: 503, body: {}}, {status: 200, body: {ok: true}});
+
+    expect((await makeClient().runOnce()).error).toMatch(/503/);
+    clock += BACKOFF_MAX;
+    await makeClient().runOnce();
+    const posts = cloud.calls.filter((c) => c.path === '/api/device/stats');
+    expect(posts.length).toBe(2);
+    expect(posts[1].body.pours).toEqual([expect.objectContaining({recipeId: 'old', pouredAt: '2026-11-10T11:30:00Z'})]);
+  });
+
+  it('does not lose metrics.json pours while the cloud is down', async () => {
+    cycle(1);
+    await makeClient().runOnce(); // baseline: 10 served
+    writeJson('metrics.json', metrics(11, 525, [{title: 'Old drink', value: 11}]));
+    cloud.on('/api/device/config', {status: 304, body: null});
+    cloud.on('/api/version', {status: 200, body: {}});
+    cloud.on('/api/device/stats', {status: 503, body: {}});
+    await makeClient().runOnce();
+    clock += BACKOFF_MAX;
+    cycle(1);
+    await makeClient().runOnce();
+    expect(lastStats().pours).toEqual([expect.objectContaining({recipeId: 'old'})]);
+  });
+
+  it('sends at most 200 pours per report and the rest on the next one', async () => {
+    cycle(2);
+    const line = (i) => JSON.stringify({ts: '2026-11-10T11:30:00Z', recipeId: 'r' + i, friendlyname: 'Ä' + i, alcoholMl: 25}) + '\n';
+    let text = '';
+    for (let i = 0; i < 250; i++) text += line(i);
+    fs.writeFileSync(path.join(dataDir, 'pours.jsonl'), text);
+    await makeClient().runOnce();
+    expect(lastStats().pours.length).toBe(200);
+    await makeClient().runOnce();
+    const rest = lastStats().pours;
+    expect(rest.length).toBe(50);
+    expect(rest[0]).toEqual(expect.objectContaining({recipeId: 'r200', friendlyName: 'Ä200'}));
   });
 });

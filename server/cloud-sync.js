@@ -43,6 +43,14 @@ var MAX_ERRORS = 20;
 var ERROR_RETENTION_MS = 24 * 60 * 60 * 1000;
 var BACKOFF_BASE_MS = 30 * 1000;
 var BACKOFF_MAX_MS = 15 * 60 * 1000;
+var MAX_POURS_PER_REPORT = 200; // the Worker keeps at most this many per report
+var ETAG_RE = /^"[\x21\x23-\x7e]{1,100}"$/; // quoted, printable, safe to send back as a header
+
+// The device token must never travel in clear text: plain http is only
+// accepted for a Worker on this machine (wrangler dev).
+function isSafeCloudUrl(url) {
+  return /^https:\/\/[^\/]/.test(url) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/.test(url);
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -141,6 +149,11 @@ function createSyncClient(opts) {
       if (res.status === 404) return {status: 'none'};
       if (!res.ok) throw new Error('config HTTP ' + res.status);
       return res.json().then(function (body) {
+        // The etag is sent back as If-None-Match and stored, so a malformed
+        // one would wedge every later cycle - treat it as a bad response.
+        if (!body || typeof body !== 'object' || typeof body.etag !== 'string' || !ETAG_RE.test(body.etag) || !(Number(body.version) > 0)) {
+          throw new Error('config: malformed response');
+        }
         return {status: 'new', body: body};
       });
     });
@@ -151,15 +164,20 @@ function createSyncClient(opts) {
   // much is left. A changed bottle/capacity, or a new refilledAt stamp,
   // means "refilled" and the level resets to full - same semantics as the
   // kiosk's BottleAdmin and remote-bottles.js.
+  //
+  // A refilledAt stamp only counts when it's newer than the last one
+  // honoured for that slot, so rolling back to an older version (or
+  // forward again past one without stamps) doesn't refill anything.
   function mergeBottles(configBottles, liveBottles) {
-    var refills = {};
+    var refills = Object.assign({}, state.refills);
     var merged = configBottles.map(function (b, slot) {
       var live = liveBottles[slot];
       var sameBottle = live && configValidate.bottleKey(live.name) === configValidate.bottleKey(b.name);
       var sameSize = live && Number(live.originalCapacity) === b.capacity;
-      var newRefill = b.refilledAt && state.refills[slot] !== b.refilledAt;
+      var lastRefill = state.refills[slot] ? Date.parse(state.refills[slot]) : NaN;
+      var newRefill = Boolean(b.refilledAt) && !(Date.parse(b.refilledAt) <= lastRefill);
       var refilled = !sameBottle || !sameSize || newRefill;
-      if (b.refilledAt) refills[slot] = b.refilledAt;
+      if (newRefill) refills[slot] = b.refilledAt;
       return {
         name: b.name,
         serving: b.serving,
@@ -282,22 +300,32 @@ function createSyncClient(opts) {
   // object per line: {ts, recipeId, friendlyname, ingredients, alcoholMl}),
   // which doesn't exist yet - see issue #15. Fallback: the per-drink counts
   // in metrics.json, which only tell us how many, not when.
+  //
+  // Returns {pours, commit}: the read position / last counts only move on
+  // when commit() is called after the cloud accepted the report, so pours
+  // made while the cloud is down are sent once it's back, not lost.
   function collectPours(metrics, recipes) {
     var pours = [];
     var stamp = new Date(now()).toISOString();
     if (fs.existsSync(files.pours)) {
+      var offset = state.poursOffset;
       var size = fs.statSync(files.pours).size;
-      if (size < state.poursOffset) state.poursOffset = 0; // file was truncated/rotated
-      if (size > state.poursOffset) {
+      if (size < offset) offset = 0; // file was truncated/rotated
+      if (size > offset) {
         var fd = fs.openSync(files.pours, 'r');
-        var buffer = Buffer.alloc(size - state.poursOffset);
-        fs.readSync(fd, buffer, 0, buffer.length, state.poursOffset);
+        var buffer = Buffer.alloc(size - offset);
+        fs.readSync(fd, buffer, 0, buffer.length, offset);
         fs.closeSync(fd);
-        var text = buffer.toString('utf8');
-        var lastNewline = text.lastIndexOf('\n');
-        if (lastNewline === -1) return pours; // partial line, wait for the rest
-        text.slice(0, lastNewline).split('\n').forEach(function (line) {
-          if (!line.trim()) return;
+        var consumed = 0;
+        var start = 0;
+        var newline;
+        // Whole lines only (a partial last line waits for the rest), and no
+        // more than one report's worth - the remainder goes next cycle.
+        while (pours.length < MAX_POURS_PER_REPORT && (newline = buffer.indexOf(10, start)) !== -1) {
+          var line = buffer.slice(start, newline).toString('utf8');
+          start = newline + 1;
+          consumed = start;
+          if (!line.trim()) continue;
           try {
             var p = JSON.parse(line);
             pours.push({
@@ -310,10 +338,15 @@ function createSyncClient(opts) {
           } catch (e) {
             // skip bad line
           }
-        });
-        state.poursOffset += lastNewline + 1;
+        }
+        offset += consumed;
       }
-      return pours;
+      return {
+        pours: pours,
+        commit: function () {
+          state.poursOffset = offset;
+        },
+      };
     }
 
     var splits = drinkSplits(metrics);
@@ -340,9 +373,13 @@ function createSyncClient(opts) {
         }
       });
     }
-    state.lastSplits = splits;
-    state.lastDrinksServed = total;
-    return pours;
+    return {
+      pours: pours,
+      commit: function () {
+        state.lastSplits = splits;
+        state.lastDrinksServed = total;
+      },
+    };
   }
 
   function systemInfo() {
@@ -377,7 +414,7 @@ function createSyncClient(opts) {
     updateBottleCounters(bottles);
     var pours = collectPours(metrics, recipes);
 
-    return {
+    var payload = {
       deviceVersion: readText(files.version) || server.version || null,
       uptimeS: Math.round(os.uptime()),
       serverReachable: server.reachable,
@@ -400,22 +437,24 @@ function createSyncClient(opts) {
         alcoholServedMl: summaryValue(metrics, 'Alcohol poured'),
       },
       bottleCounters: state.bottleCounters,
-      pours: pours,
+      pours: pours.pours,
       errors: state.errors,
       system: systemInfo(),
     };
+    return {payload: payload, commit: pours.commit};
   }
 
   function reportStats() {
     return checkServer().then(function (server) {
-      var payload = buildStats(server);
+      var stats = buildStats(server);
       return fetch(cloudUrl + '/api/device/stats', {
         method: 'POST',
         headers: headers(),
-        body: JSON.stringify(payload),
+        body: JSON.stringify(stats.payload),
         timeout: timeoutMs,
       }).then(function (res) {
         if (!res.ok) throw new Error('stats HTTP ' + res.status);
+        stats.commit();
         return res.json();
       });
     });
@@ -432,12 +471,19 @@ function createSyncClient(opts) {
       log('cloud-sync: JAMES_CLOUD_URL / JAMES_CLOUD_DEVICE_TOKEN not set, skipping.');
       return Promise.resolve({skipped: true});
     }
+    if (!isSafeCloudUrl(cloudUrl)) {
+      log('cloud-sync: JAMES_CLOUD_URL must be https:// (http only for localhost), skipping.');
+      return Promise.resolve({skipped: true});
+    }
     if (state.nextAttemptAt && now() < state.nextAttemptAt) {
       return Promise.resolve({skipped: true, backoffUntil: state.nextAttemptAt});
     }
 
     var summary = {applied: false};
-    return syncConfig()
+    // Everything inside the chain, so even a synchronous throw ends up in
+    // the catch below (backoff) instead of escaping runOnce.
+    return Promise.resolve()
+      .then(syncConfig)
       .then(function (applied) {
         summary.applied = applied;
         return reportStats();
