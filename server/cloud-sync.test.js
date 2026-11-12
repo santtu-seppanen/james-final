@@ -260,6 +260,65 @@ describe('config sync', () => {
   });
 });
 
+describe('drinks made on the machine', () => {
+  const aiDrink = {friendlyname: 'AI Fizz', ingredients: [{name: 'vodka', serving: 50}, {name: 'soda', serving: 100, manual: true}], imageUrl: 'vodka'};
+
+  it('sends a pending drink up first, then takes the cloud list as the truth', async () => {
+    writeJson('pending_recipes.json', {'1794': aiDrink});
+    cloud.on('/api/device/recipes', {status: 201, body: {ok: true}});
+    cloud.on('/api/device/config', publishedConfig(2, {recipes: {'1794': aiDrink, vodkatonic: {friendlyname: 'Vodka & Tonic', ingredients: [{name: 'vodka', serving: 50}]}}}));
+    cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
+
+    await makeClient().runOnce();
+
+    const order = cloud.calls.map((c) => c.path);
+    expect(order.indexOf('/api/device/recipes')).toBeLessThan(order.indexOf('/api/device/config'));
+    expect(cloud.calls.find((c) => c.path === '/api/device/recipes').body).toEqual({id: '1794', recipe: aiDrink});
+    expect(readJson('pending_recipes.json')).toEqual({});
+    // The old local drink is gone, the cloud's list is what's on the machine
+    expect(Object.keys(readJson('recipes_config.json')).sort()).toEqual(['1794', 'vodkatonic']);
+  });
+
+  it('keeps the local list and the queue when the cloud cannot take the drink yet', async () => {
+    writeJson('pending_recipes.json', {'1794': aiDrink});
+    cloud.on('/api/device/recipes', {status: 503, body: {}});
+
+    const summary = await makeClient().runOnce();
+
+    expect(summary.error).toMatch(/recipe HTTP 503/);
+    expect(readJson('pending_recipes.json')).toEqual({'1794': aiDrink});
+    expect(Object.keys(readJson('recipes_config.json'))).toEqual(['old']);
+  });
+
+  it('gives up on a drink the cloud refuses and says so', async () => {
+    writeJson('pending_recipes.json', {'1794': aiDrink});
+    cloud.on('/api/device/recipes', {status: 400, body: {error: 'invalid recipe'}});
+    cloud.on('/api/device/config', {status: 404, body: {}});
+    cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
+
+    await makeClient().runOnce();
+
+    expect(readJson('pending_recipes.json')).toEqual({});
+    expect(readJson('cloud-sync-state.json').errors.map((e) => e.message).join(' ')).toMatch(/refused drink 1794/);
+  });
+
+  it('does not lose a drink saved while the cloud list is on its way', async () => {
+    cloud.on('/api/device/config', publishedConfig(2));
+    cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
+    // The guest adds a drink after the upload step but before the list is applied.
+    const inner = cloud.fetch;
+    cloud.fetch = (url, init) => {
+      if (new URL(url).pathname === '/api/device/config') writeJson('pending_recipes.json', {'1794': aiDrink});
+      return inner(url, init);
+    };
+
+    await makeClient().runOnce();
+
+    expect(Object.keys(readJson('recipes_config.json')).sort()).toEqual(['1794', 'vodkatonic']);
+    expect(readJson('pending_recipes.json')).toEqual({'1794': aiDrink});
+  });
+});
+
 describe('offline behaviour', () => {
   it('leaves files alone, backs off exponentially and resumes', async () => {
     // Nothing queued -> every cloud call is refused

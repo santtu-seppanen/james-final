@@ -2,13 +2,15 @@
 //
 //   GET  /api/device/config   If-None-Match: "<etag>"  -> 304, or 200 {version, etag, publishedAt, config}
 //   POST /api/device/stats    {...snapshot}             -> {ok, config: {version, etag}}
+//   POST /api/device/recipes  {id, recipe}              -> {ok, id, version, etag}  (a drink made on the Pi)
 //
 // The stats response carries the current config version so the device
 // learns about a new version on its next report even if it only polls
 // config rarely.
 
 import {json, error, readJson, HttpError} from '../http.js';
-import {getCurrent} from '../config-store.js';
+import {getEffective, publish} from '../config-store.js';
+import validate from '../../shared/config-validate.js';
 
 const HISTORY_MIN_INTERVAL_MS = 5 * 60 * 1000;
 const HISTORY_RETENTION_DAYS = 30;
@@ -18,7 +20,7 @@ const MAX_POURS_PER_REPORT = 200;
 const MAX_LIST = 64;
 
 export async function getConfig(request, env) {
-  const current = await getCurrent(env.DB, env.DEVICE_ID, true);
+  const current = await getEffective(env.DB, env.DEVICE_ID);
   if (!current) return error('no config published yet', 404);
 
   const ifNoneMatch = request.headers.get('if-none-match');
@@ -176,10 +178,43 @@ export async function postStats(request, env) {
 
   await db.batch(statements);
 
-  const current = await getCurrent(db, deviceId, false);
+  const current = await getEffective(db, deviceId);
   return json({
     ok: true,
     serverTime: now,
     config: current ? {version: current.version, etag: current.etag} : null,
   });
+}
+
+// A drink invented on the Pi (AI drink) is added to the cloud's list, which
+// is the source of truth: the Pi's own list is overwritten from here whenever
+// the list changes. The Pi picks the id, so it is the same on both sides and
+// asking twice is harmless.
+export async function addRecipe(request, env) {
+  let payload;
+  try {
+    payload = await readJson(request);
+  } catch (e) {
+    if (e instanceof HttpError) return error(e.message, e.status);
+    throw e;
+  }
+  const id = payload?.id;
+  const recipe = payload?.recipe;
+  if (typeof id !== 'string' || !recipe || typeof recipe !== 'object') return error('id and recipe are required', 400);
+
+  const current = await getEffective(env.DB, env.DEVICE_ID);
+  if (!current) return error('no config published yet', 404);
+  if (current.config.recipes[id]) {
+    return json({ok: true, id, version: current.version, etag: current.etag, existed: true});
+  }
+
+  const result = validate.validateConfig({...current.config, recipes: {...current.config.recipes, [id]: recipe}});
+  if (!result.ok) return error('invalid recipe', 400, {errors: result.errors});
+
+  const published = await publish(env.DB, env.DEVICE_ID, result.config, {
+    author: 'device',
+    note: `Drink made on the device: ${String(recipe.friendlyname).slice(0, 60)}`,
+  });
+  const effective = await getEffective(env.DB, env.DEVICE_ID);
+  return json({ok: true, id, version: published.version, etag: effective.etag}, 201);
 }

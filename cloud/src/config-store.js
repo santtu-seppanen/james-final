@@ -1,5 +1,7 @@
 // D1 access for config versions. Versions are append-only; the current
-// config is the highest version for the device.
+// config is the highest version for the device. The bottle setup is NOT part
+// of the versions: it is one live row (bottle_setup) that is edited in place,
+// and getEffective() puts the two back together for the device and the UI.
 
 // Default import: the shared module is CommonJS (it also runs on the Pi's Node 10).
 import validate from '../shared/config-validate.js';
@@ -61,13 +63,60 @@ export async function listVersions(db, deviceId, limit = 50) {
   return (rows.results ?? []).map((r) => ({...rowToVersion(r, false), size: r.size}));
 }
 
+export function stripBottles(config) {
+  const {bottles, ...rest} = config; // eslint-disable-line no-unused-vars
+  return rest;
+}
+
+// The live bottle list. If it has never been saved on its own, it starts as
+// the bottles of the latest version (how things were before it was split out).
+export async function getBottleSetup(db, deviceId) {
+  const row = await db.prepare('SELECT * FROM bottle_setup WHERE device_id = ?').bind(deviceId).first();
+  if (row) return {bottles: JSON.parse(row.body_json), etag: row.etag, updatedAt: row.updated_at, author: row.author};
+  const current = await getCurrent(db, deviceId, true);
+  if (!current || !Array.isArray(current.config.bottles)) return null;
+  return setBottleSetup(db, deviceId, current.config.bottles, {author: 'migrated'});
+}
+
+// Replaces the live bottle list. Returns {bottles, etag, updatedAt, changed}.
+export async function setBottleSetup(db, deviceId, bottles, {author} = {}) {
+  const bodyJson = canonicalJson(bottles);
+  const row = await db.prepare('SELECT body_json, etag, updated_at, author FROM bottle_setup WHERE device_id = ?').bind(deviceId).first();
+  if (row && row.body_json === bodyJson) {
+    return {bottles, etag: row.etag, updatedAt: row.updated_at, author: row.author, changed: false};
+  }
+  const etag = `"b-${(await sha256Hex(bodyJson)).slice(0, 16)}"`;
+  const updatedAt = new Date().toISOString();
+  await db
+    .prepare(
+      `INSERT INTO bottle_setup (device_id, body_json, etag, author, updated_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(device_id) DO UPDATE SET body_json = excluded.body_json, etag = excluded.etag, author = excluded.author, updated_at = excluded.updated_at`,
+    )
+    .bind(deviceId, bodyJson, etag, author ?? null, updatedAt)
+    .run();
+  return {bottles, etag, updatedAt, author: author ?? null, changed: true};
+}
+
+// What the device and the UI see: the current version with the live bottles
+// put back in. The ETag covers both, so a bottle edit alone makes the device
+// fetch again even though the version number didn't move.
+export async function getEffective(db, deviceId) {
+  const current = await getCurrent(db, deviceId, true);
+  if (!current) return null;
+  const setup = await getBottleSetup(db, deviceId);
+  const bottles = setup ? setup.bottles : current.config.bottles;
+  const etag = setup ? `${current.etag.slice(0, -1)}.${setup.etag.slice(1)}` : current.etag;
+  return {...current, etag, versionEtag: current.etag, bottlesUpdatedAt: setup ? setup.updatedAt : null, config: {...current.config, bottles}};
+}
+
 // Appends a new version. `config` must already be validated/normalized.
 // Returns {version, etag, createdAt, unchanged} - unchanged when the body is
 // identical to the current version (nothing is inserted then).
 export async function publish(db, deviceId, config, {author, note, rolledBackFrom = null} = {}) {
+  config = stripBottles(config);
   const bodyJson = canonicalJson(config);
   const current = await getCurrent(db, deviceId, true);
-  if (current && canonicalJson(current.config) === bodyJson && rolledBackFrom === null) {
+  if (current && canonicalJson(stripBottles(current.config)) === bodyJson && rolledBackFrom === null) {
     return {...current, unchanged: true};
   }
   const version = (current?.version ?? 0) + 1;

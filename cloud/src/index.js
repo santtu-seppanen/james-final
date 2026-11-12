@@ -1,4 +1,4 @@
-// James cloud: versioned device config + stats ingest + the config UI.
+// James cloud: versioned device config (the bottle setup is live, unversioned) + stats ingest + the config UI.
 //
 // Static files in public/ are served by the Workers assets binding (see
 // wrangler.toml); only /api/* reaches this code. Two bearer tokens, both
@@ -13,6 +13,8 @@ const ADMIN_ROUTES = [
   ['GET', /^\/api\/admin\/overview$/, admin.overview],
   ['GET', /^\/api\/admin\/config$/, admin.getConfig],
   ['PUT', /^\/api\/admin\/config$/, admin.putConfig],
+  ['GET', /^\/api\/admin\/bottles$/, admin.getBottles],
+  ['PUT', /^\/api\/admin\/bottles$/, admin.putBottles],
   ['GET', /^\/api\/admin\/config\/versions$/, admin.versions],
   ['GET', /^\/api\/admin\/config\/versions\/(\d{1,9})$/, admin.version],
   ['POST', /^\/api\/admin\/config\/rollback$/, admin.rollback],
@@ -23,6 +25,7 @@ const ADMIN_ROUTES = [
 const DEVICE_ROUTES = [
   ['GET', /^\/api\/device\/config$/, device.getConfig],
   ['POST', /^\/api\/device\/stats$/, device.postStats],
+  ['POST', /^\/api\/device\/recipes$/, device.addRecipe],
 ];
 
 function match(routes, method, path) {

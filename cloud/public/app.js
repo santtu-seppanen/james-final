@@ -727,7 +727,8 @@
     // a = this version, b = current. Lists what differs at section/recipe/slot level.
     var out = [];
     if (!b) return ['(no current version to compare with)'];
-    var slots = Math.max(a.bottles.length, b.bottles.length);
+    // Bottles are live, not versioned: only old versions still carry them.
+    var slots = a.bottles && b.bottles ? Math.max(a.bottles.length, b.bottles.length) : 0;
     for (var i = 0; i < slots; i++) {
       var x = a.bottles[i], y = b.bottles[i];
       if (canonical(x) === canonical(y)) continue;
@@ -760,7 +761,7 @@
         $('version-dialog-title').textContent = 'v' + v.version + (v.note ? ' - ' + v.note : '');
         var meta = $('version-meta');
         meta.innerHTML = '';
-        [['Published', formatDate(v.createdAt)], ['By', v.author || 'admin'], ['ETag', v.etag], ['Bottles', v.config.bottles.map(function (b) { return b.name; }).join(', ')], ['Recipes', String(Object.keys(v.config.recipes).length)]].forEach(function (row) {
+        [['Published', formatDate(v.createdAt)], ['By', v.author || 'admin'], ['ETag', v.etag], ['Bottles', v.config.bottles ? v.config.bottles.map(function (b) { return b.name; }).join(', ') : 'live (not part of versions)'], ['Recipes', String(Object.keys(v.config.recipes).length)]].forEach(function (row) {
           meta.appendChild(el('dt', {text: row[0]}));
           meta.appendChild(el('dd', {text: row[1]}));
         });
@@ -823,7 +824,13 @@
         state.current = {version: result.version, etag: result.etag, createdAt: result.createdAt, config: result.config};
         state.draft = clone(result.config);
         $('publish-note').value = '';
-        showNotice(result.unchanged ? 'Nothing changed.' : 'Published v' + result.version + '. The device applies it on its next check-in.');
+        showNotice(
+          result.unchanged
+            ? result.bottlesChanged
+              ? 'Bottles saved. They apply at once - bottles have no versions.'
+              : 'Nothing changed.'
+            : 'Published v' + result.version + '. The device applies it on its next check-in.' + (result.bottlesChanged ? ' Bottles were saved live.' : '')
+        );
         return Promise.all([api('GET', '/api/admin/config/versions?limit=100'), api('GET', '/api/admin/overview')]);
       })
       .then(function (results) {
@@ -910,6 +917,8 @@
   $('version-load').addEventListener('click', function () {
     if (!viewingVersion) return;
     state.draft = clone(viewingVersion.config);
+    // Bottles aren't part of a version: keep the live ones.
+    state.draft.bottles = clone(state.current.config.bottles);
     $('version-dialog').close();
     onDraftChange();
     showNotice('v' + viewingVersion.version + ' loaded into the draft - publish to make it current.');

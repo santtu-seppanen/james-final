@@ -116,6 +116,7 @@ function createSyncClient(opts) {
     settings: path.join(dataDir, SETTINGS_FILE),
     metrics: path.join(dataDir, 'metrics.json'),
     pours: path.join(dataDir, 'pours.jsonl'),
+    pending: path.join(dataDir, 'pending_recipes.json'),
     state: path.join(dataDir, STATE_FILE),
     version: path.join(serverDir, 'VERSION'),
   };
@@ -138,6 +139,49 @@ function createSyncClient(opts) {
 
   function headers(extra) {
     return Object.assign({authorization: 'Bearer ' + token, 'content-type': 'application/json'}, extra || {});
+  }
+
+  // --- drinks made on this machine ---
+
+  // Drinks invented here (AI drinks) are saved locally by index.js and listed
+  // in pending_recipes.json until the cloud has them. The cloud's list is the
+  // truth and replaces ours whenever it changes, so a drink is sent up first
+  // and, until it has been, kept through any overwrite (see applyConfig).
+  function readPending() {
+    var pending = readJson(files.pending, {});
+    return pending && typeof pending === 'object' && !Array.isArray(pending) ? pending : {};
+  }
+
+  function uploadPendingRecipes() {
+    var pending = readPending();
+    var ids = Object.keys(pending);
+    if (ids.length === 0) return Promise.resolve();
+    return ids.reduce(function (chain, id) {
+      return chain.then(function () {
+        return fetch(cloudUrl + '/api/device/recipes', {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({id: id, recipe: pending[id]}),
+          timeout: timeoutMs,
+        }).then(function (res) {
+          if (res.ok) {
+            log('cloud-sync: sent drink ' + id + ' to the cloud');
+          } else if (res.status === 400 || res.status === 422) {
+            // The cloud looked at it and will never take it - don't retry it forever.
+            // (404, 401 and the like mean the cloud isn't ready, not that the drink is bad.)
+            recordError('recipe', 'cloud refused drink ' + id + ' (HTTP ' + res.status + ')');
+          } else {
+            throw new Error('recipe HTTP ' + res.status);
+          }
+          // Sent or refused: either way it's no longer waiting.
+          var left = readPending();
+          delete left[id];
+          writeJsonAtomic(files.pending, left);
+          // The cloud list now differs from what we last looked at.
+          state.etag = null;
+        });
+      });
+    }, Promise.resolve());
   }
 
   // --- config ---
@@ -209,7 +253,8 @@ function createSyncClient(opts) {
     });
     try {
       writeJsonAtomic(files.available, config.availableBottles);
-      writeJsonAtomic(files.recipes, config.recipes);
+      // The cloud's list wins, except for drinks it hasn't been told about yet.
+      writeJsonAtomic(files.recipes, Object.assign({}, config.recipes, readPending()));
       writeJsonAtomic(files.bottles, merged.bottles);
       writeJsonAtomic(files.settings, config.settings);
     } catch (e) {
@@ -483,6 +528,7 @@ function createSyncClient(opts) {
     // Everything inside the chain, so even a synchronous throw ends up in
     // the catch below (backoff) instead of escaping runOnce.
     return Promise.resolve()
+      .then(uploadPendingRecipes)
       .then(syncConfig)
       .then(function (applied) {
         summary.applied = applied;

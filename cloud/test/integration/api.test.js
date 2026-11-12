@@ -65,7 +65,8 @@ test('publishing validates, versions monotonically and serves ETags to the devic
   const v1 = await admin('PUT', '/api/admin/config', {config: sampleConfig(), note: 'first'});
   assert.equal(v1.status, 201, v1.text);
   assert.equal(v1.body.version, 1);
-  assert.match(v1.body.etag, /^"v1-[0-9a-f]{16}"$/);
+  // version hash, then the hash of the live bottle setup
+  assert.match(v1.body.etag, /^"v1-[0-9a-f]{16}\.b-[0-9a-f]{16}"$/);
   // Settings came back defaulted
   assert.equal(v1.body.config.settings.led.brightness, 60);
   assert.equal(v1.body.config.settings.audio.enabled, true);
@@ -191,4 +192,58 @@ test('schema endpoint describes the settings form', async () => {
   assert.deepEqual(res.body.servings, [25, 50]);
   assert.ok(res.body.settings.some((s) => s.key === 'led'));
   assert.equal(res.body.settingsDefaults.show.enabled, false);
+});
+
+test('bottles are live: edited in place, no version, the device sees them through the ETag', async () => {
+  const before = await admin('GET', '/api/admin/config');
+  const versionBefore = before.body.version;
+
+  const bottles = before.body.config.bottles.map((b) => ({name: b.name, serving: b.serving, capacity: b.capacity}));
+  bottles[0].capacity = 500;
+  const put = await admin('PUT', '/api/admin/bottles', {bottles});
+  assert.equal(put.status, 201, put.text);
+  assert.equal(put.body.changed, true);
+
+  // No new version, but a new ETag the device will fetch
+  const after = await admin('GET', '/api/admin/config');
+  assert.equal(after.body.version, versionBefore);
+  assert.notEqual(after.body.etag, before.body.etag);
+  assert.equal(after.body.config.bottles[0].capacity, 500);
+  assert.equal((await admin('GET', '/api/admin/config/versions')).body.versions[0].version, versionBefore);
+  const refetched = await device('GET', '/api/device/config', undefined, {'if-none-match': before.body.etag});
+  assert.equal(refetched.status, 200);
+  assert.equal(refetched.body.config.bottles[0].capacity, 500);
+
+  // Saving the same bottles again changes nothing
+  assert.equal((await admin('PUT', '/api/admin/bottles', {bottles})).status, 200);
+
+  // Rolling the config back leaves the bottles as they are now
+  const rb = await admin('POST', '/api/admin/config/rollback', {version: 1});
+  assert.equal(rb.status, 201, rb.text);
+  assert.equal((await admin('GET', '/api/admin/bottles')).body.bottles[0].capacity, 500);
+
+  // Bad bottles are refused
+  const bad = await admin('PUT', '/api/admin/bottles', {bottles: [{name: 'nonexistent', serving: 25, capacity: 1}]});
+  assert.equal(bad.status, 400);
+});
+
+test('a drink made on the device is added to the cloud list, once', async () => {
+  const recipe = {friendlyname: 'AI Test Fizz', ingredients: [{name: 'vodka', serving: 50}, {name: 'soda', serving: 100, manual: true}], imageUrl: 'vodka'};
+  const added = await device('POST', '/api/device/recipes', {id: '1794506095289', recipe});
+  assert.equal(added.status, 201, added.text);
+
+  const config = await admin('GET', '/api/admin/config');
+  assert.equal(config.body.config.recipes['1794506095289'].friendlyname, 'AI Test Fizz');
+  assert.equal((await admin('GET', '/api/admin/config/versions')).body.versions[0].author, 'device');
+
+  // Asking again with the same id changes nothing
+  const again = await device('POST', '/api/device/recipes', {id: '1794506095289', recipe});
+  assert.equal(again.status, 200);
+  assert.equal(again.body.existed, true);
+  assert.equal((await admin('GET', '/api/admin/config')).body.version, config.body.version);
+
+  // A recipe the cloud would not accept is refused, not stored
+  const bad = await device('POST', '/api/device/recipes', {id: 'nope', recipe: {friendlyname: 'X', ingredients: [{name: 'unobtainium', serving: 50}]}});
+  assert.equal(bad.status, 400);
+  assert.equal((await device('POST', '/api/device/recipes', {recipe})).status, 400);
 });

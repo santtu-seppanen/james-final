@@ -21,6 +21,7 @@ var path = require("path");
 // Unset (local dev), everything just lives next to index.js as before.
 const DATA_DIR = process.env.JAMES_DATA_DIR || ".";
 const recipesConfig = path.join(DATA_DIR, "recipes_config.json");
+const pendingRecipes = path.join(DATA_DIR, "pending_recipes.json");
 const servos = require("./servos_config.json");
 const metricsPath = path.join(DATA_DIR, "metrics.json");
 const pourTimeoutMs = 8000;
@@ -273,6 +274,21 @@ app.post("/api/save-recipe", (req, res) => {
     color: recipe.color,
   };
   fs.writeFileSync(recipesConfig, JSON.stringify(recipes));
+
+  // The cloud's drink list is the truth and overwrites ours when it changes:
+  // queue this drink for the sync process to send up first.
+  try {
+    let pending = {};
+    try {
+      pending = JSON.parse(fs.readFileSync(pendingRecipes));
+    } catch (e) {
+      // no queue yet
+    }
+    pending[id] = recipes[id];
+    fs.writeFileSync(pendingRecipes, JSON.stringify(pending));
+  } catch (e) {
+    console.log("Could not queue the drink for the cloud: " + e);
+  }
 
   res.json({ id, friendlyname: name });
 });

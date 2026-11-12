@@ -1,8 +1,11 @@
 // Admin API (bearer ADMIN_TOKEN), used by the config UI in public/.
 //
 //   GET  /api/admin/overview                  device state + current config version
-//   GET  /api/admin/config                    current config (full body)
-//   PUT  /api/admin/config                    {config, note?, baseVersion?} -> publish a new version
+//   GET  /api/admin/config                    current config (full body, live bottles included)
+//   PUT  /api/admin/config                    {config, note?, baseVersion?} -> publish a new version; the
+//                                             bottles in it are saved live instead (no version of their own)
+//   GET  /api/admin/bottles                   the live bottle setup
+//   PUT  /api/admin/bottles                   {bottles} -> replaces it at once, no version
 //   GET  /api/admin/config/versions?limit=    history (no bodies)
 //   GET  /api/admin/config/versions/:version  one version (full body)
 //   POST /api/admin/config/rollback           {version, note?} -> new version with that body
@@ -10,7 +13,7 @@
 //   GET  /api/admin/schema                    settings schema + validation constants
 
 import {json, error, readJson, HttpError, authorOf} from '../http.js';
-import {getCurrent, getVersion, listVersions, publish} from '../config-store.js';
+import {getCurrent, getEffective, getBottleSetup, getVersion, listVersions, publish, setBottleSetup} from '../config-store.js';
 import validate from '../../shared/config-validate.js';
 import settingsSchema from '../../shared/settings-schema.js';
 
@@ -55,21 +58,21 @@ function deviceStateOf(row) {
 export async function overview(request, env) {
   const [row, current] = await Promise.all([
     env.DB.prepare('SELECT * FROM device_state WHERE device_id = ?').bind(env.DEVICE_ID).first(),
-    getCurrent(env.DB, env.DEVICE_ID, false),
+    getEffective(env.DB, env.DEVICE_ID),
   ]);
   const device = deviceStateOf(row);
   return json({
     deviceId: env.DEVICE_ID,
     serverTime: new Date().toISOString(),
     device,
-    config: current,
+    config: current && {version: current.version, etag: current.etag, author: current.author, note: current.note, createdAt: current.createdAt, bottlesUpdatedAt: current.bottlesUpdatedAt},
     // "pending" = a config exists that the device hasn't reported applying yet.
     pending: Boolean(current && (!device || device.appliedConfig.etag !== current.etag)),
   });
 }
 
 export async function getConfig(request, env) {
-  const current = await getCurrent(env.DB, env.DEVICE_ID, true);
+  const current = await getEffective(env.DB, env.DEVICE_ID);
   if (!current) return error('no config published yet', 404);
   return json(current, 200, {etag: current.etag});
 }
@@ -82,7 +85,11 @@ export async function putConfig(request, env) {
     if (e instanceof HttpError) return error(e.message, e.status);
     throw e;
   }
-  const result = validate.validateConfig(body?.config);
+  // A config without bottles keeps the ones that are live now.
+  const live = await getBottleSetup(env.DB, env.DEVICE_ID);
+  const input = body?.config;
+  const withBottles = input && typeof input === 'object' && input.bottles === undefined && live ? {...input, bottles: live.bottles} : input;
+  const result = validate.validateConfig(withBottles);
   if (!result.ok) return error('invalid config', 400, {errors: result.errors});
 
   // Optimistic concurrency: the UI sends the version it edited from, so two
@@ -95,14 +102,48 @@ export async function putConfig(request, env) {
     }
   }
 
+  // Bottles are live: saved in place, never a version of their own.
+  const bottles = await setBottleSetup(env.DB, env.DEVICE_ID, result.config.bottles, {author: authorOf(request)});
   const published = await publish(env.DB, env.DEVICE_ID, result.config, {
     author: authorOf(request),
     note: typeof body.note === 'string' ? body.note.slice(0, 200) : null,
   });
+  const effective = await getEffective(env.DB, env.DEVICE_ID);
   return json(
-    {version: published.version, etag: published.etag, createdAt: published.createdAt, unchanged: published.unchanged, config: published.config},
-    published.unchanged ? 200 : 201,
+    {
+      version: published.version,
+      etag: effective.etag,
+      createdAt: published.createdAt,
+      unchanged: published.unchanged,
+      bottlesChanged: bottles.changed,
+      config: effective.config,
+    },
+    published.unchanged && !bottles.changed ? 200 : 201,
   );
+}
+
+export async function getBottles(request, env) {
+  const setup = await getBottleSetup(env.DB, env.DEVICE_ID);
+  if (!setup) return error('no bottles yet', 404);
+  return json(setup, 200, {etag: setup.etag});
+}
+
+export async function putBottles(request, env) {
+  let body;
+  try {
+    body = await readJson(request);
+  } catch (e) {
+    if (e instanceof HttpError) return error(e.message, e.status);
+    throw e;
+  }
+  const current = await getCurrent(env.DB, env.DEVICE_ID, true);
+  if (!current) return error('no config published yet', 404);
+  // Validated like any config: bottle names must be in availableBottles and
+  // the recipes still have to fit the new setup.
+  const result = validate.validateConfig({...current.config, bottles: body?.bottles});
+  if (!result.ok) return error('invalid bottles', 400, {errors: result.errors});
+  const saved = await setBottleSetup(env.DB, env.DEVICE_ID, result.config.bottles, {author: authorOf(request)});
+  return json(saved, saved.changed ? 201 : 200, {etag: saved.etag});
 }
 
 export async function versions(request, env) {
@@ -133,7 +174,9 @@ export async function rollback(request, env) {
   if (!target) return error('no such version', 404);
 
   // Re-validate: the schema may have grown since that version was stored.
-  const result = validate.validateConfig(target.config);
+  // Bottles aren't rolled back: they are live, whatever is set now stays.
+  const live = await getBottleSetup(env.DB, env.DEVICE_ID);
+  const result = validate.validateConfig(live ? {...target.config, bottles: live.bottles} : target.config);
   if (!result.ok) return error('that version no longer validates', 400, {errors: result.errors});
 
   const published = await publish(env.DB, env.DEVICE_ID, result.config, {
@@ -141,7 +184,8 @@ export async function rollback(request, env) {
     note: typeof body.note === 'string' && body.note ? body.note.slice(0, 200) : `Rollback to v${v}`,
     rolledBackFrom: v,
   });
-  return json({version: published.version, etag: published.etag, createdAt: published.createdAt, rolledBackFrom: v}, 201);
+  const effective = await getEffective(env.DB, env.DEVICE_ID);
+  return json({version: published.version, etag: effective.etag, createdAt: published.createdAt, rolledBackFrom: v}, 201);
 }
 
 export async function stats(request, env) {
