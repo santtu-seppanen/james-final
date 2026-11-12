@@ -544,7 +544,7 @@ img {
   flex: 1;
   min-height: 0;
   touch-action: none; /* the ring handles every drag itself */
-  overflow: hidden;
+  overflow: visible; /* drinks may run past the edges; the screen clips them */
 }
 
 .orbit__card {
@@ -2235,4 +2235,117 @@ img {
   top: 0;
   left: 0;
   transform-origin: 0 0;
+}
+
+/* ------------------------------------------------------------------------
+   Portrait presentation of the pour and done screens (480 x 800 box):
+   everything stacked and centred, smaller type.
+   ------------------------------------------------------------------------ */
+.pouring {
+  grid-template-rows: auto 1fr auto auto;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.pouring__header {
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pouring__thumb {
+  width: 84px;
+  height: 84px;
+}
+
+.pouring__eyebrow {
+  font-size: 13px;
+}
+
+.pouring__name {
+  font-size: 26px;
+  line-height: 1.1;
+}
+
+.pouring__track {
+  margin: 0;
+}
+
+.pouring__count {
+  font-size: 112px;
+}
+
+.pouring__status {
+  font-size: 20px;
+}
+
+.progress {
+  width: 80%;
+}
+
+/* Six small columns: gauge on top, name underneath. */
+.bottle-strip--horizontal {
+  gap: 6px;
+}
+
+.bottle-strip--horizontal .bottle-slot {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+  justify-items: center;
+  row-gap: 6px;
+  max-width: none;
+  padding: 8px 2px;
+}
+
+.bottle-strip--horizontal .bottle-slot__gauge {
+  grid-row: 1;
+  height: 52px;
+}
+
+.bottle-strip--horizontal .bottle-slot__name {
+  max-width: 100%;
+  font-size: 12px;
+}
+
+.bottle-strip--horizontal .bottle-slot__meta {
+  display: none;
+}
+
+.pouring__actions {
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.done {
+  grid-template-rows: 1fr auto;
+  padding: 20px 16px;
+  text-align: center;
+}
+
+.done__main {
+  flex-direction: column;
+  justify-content: center;
+  gap: 18px;
+}
+
+.done__art {
+  width: 150px;
+  height: 150px;
+}
+
+.done__title {
+  font-size: 56px;
+}
+
+.done__name {
+  font-size: 24px;
+}
+
+.done__todo {
+  align-items: center;
+  font-size: 20px;
+}
+
+.done__actions {
+  justify-content: center;
 }

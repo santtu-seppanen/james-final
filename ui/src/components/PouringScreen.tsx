@@ -98,15 +98,10 @@ export function PouringScreen({recipe, bottles, servos, result, show, onDone}: P
             <Icon name="music" /> Skip show
           </button>
         )}
-        {features.estop ? (
+        {features.estop && (
           <button className="button button--danger button--lg" onClick={() => {/* POST /api/estop, issue #9 */}}>
             <Icon name="stop" size={28} /> Stop
           </button>
-        ) : (
-          <span className="button button--danger button--lg is-disabled" aria-disabled="true" title="Emergency stop isn't wired up on this machine">
-            <Icon name="stop" size={28} /> Stop
-            <span className="button__note">not connected</span>
-          </span>
         )}
       </footer>
     </div>

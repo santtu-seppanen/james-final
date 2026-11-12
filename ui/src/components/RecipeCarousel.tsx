@@ -57,7 +57,7 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const position = front - drag; // fractional while dragging
   const step = (2 * Math.PI) / Math.max(count, MIN_SLOTS);
   const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
-  const radiusX = size.w * 0.34;
+  const radiusX = size.w * 0.62; // wide: the side drinks run off the edges of the screen
   const radiusY = size.h * 0.2;
   const current = recipes[front];
 
