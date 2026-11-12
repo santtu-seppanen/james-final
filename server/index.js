@@ -12,6 +12,7 @@ var fs = require("fs");
 var exec = require("child_process").exec;
 var aiModule = require("./ai");
 var shots = require("./shots");
+var pourOrderModule = require("./pourOrder");
 var path = require("path");
 // Live, mutable state (bottle levels, saved recipes, usage metrics) lives
 // outside the git-tracked directory when JAMES_DATA_DIR is set, so that
@@ -298,51 +299,34 @@ function pourDrink(recipe) {
     if (!foundSplit) {
       drinksSplits.push(drinkSplit);
     }
-    for (let ingredient of recipe.ingredients) {
-      // Fizzy mixers are poured by hand, even if a bottle of it is loaded.
-      if (ingredient.manual) continue;
-      bottles.forEach(function (bottle, i) {
-        if (checkBottleName(bottle.name, ingredient.name)) {
-          const pourCount = ingredient.serving / bottle.serving;
-          alcoholServed += ingredient.serving;
-          console.log("Pouring " + bottle.name + " " + pourCount + " times.");
+    // One ingredient at a time, spirits first and the juices on top. Fizzy
+    // mixers are poured by hand, even if a bottle of it is loaded.
+    const plan = pourOrderModule.planPour(recipe.ingredients, bottles);
+    totalPourCount = plan.totalSlots;
+    plan.steps.forEach((step) => {
+      const bottle = bottles[step.slot];
+      const i = step.slot;
+      alcoholServed += step.pours * bottle.serving;
+      console.log("Pouring " + bottle.name + " " + step.pours + " times.");
 
-          for (var j = 0; j < pourCount; ++j) {
-            var totalPourTimeout = j * pourTimeoutMs;
+      for (let j = 0; j < step.pours; ++j) {
+        const totalPourTimeout = (step.startSlot + j) * pourTimeoutMs;
+        const leftOver = step.pours - j;
+        const openTimeout = leftOver < 1 ? leftOver * 4000 : 4000;
+        setTimeout(() => {
+          bottle.capacity = bottle.capacity - bottle.serving;
+          openServo(i, openTimeout);
+          servoState[i] = true;
+          io.emit(socketName, { servos: servoState });
+        }, totalPourTimeout);
 
-            if (ingredient.wait > 1) {
-              totalPourTimeout =
-                totalPourTimeout + ingredient.wait * pourTimeoutMs;
-              totalPourCount = ingredient.wait + 1;
-            }
-
-            if (totalPourCount < pourCount) {
-              totalPourCount = j + 1;
-            }
-
-            var openTimeout = 4000;
-            var leftOver = pourCount - j;
-
-            if (leftOver < 1) {
-              openTimeout = leftOver * openTimeout;
-            }
-            console.log(bottles);
-            setTimeout(() => {
-              bottle.capacity = bottle.capacity - bottle.serving;
-              openServo(i, openTimeout);
-              servoState[i] = true;
-              io.emit(socketName, { servos: servoState });
-            }, totalPourTimeout);
-
-            setTimeout(() => {
-              servoState[i] = false;
-              io.emit(socketName, { servos: servoState, bottles: bottles });
-              sendBottlesUpdateDashboard();
-            }, totalPourTimeout + pourTimeoutMs);
-          }
-        }
-      });
-    }
+        setTimeout(() => {
+          servoState[i] = false;
+          io.emit(socketName, { servos: servoState, bottles: bottles });
+          sendBottlesUpdateDashboard();
+        }, totalPourTimeout + pourTimeoutMs);
+      }
+    });
     console.log(servoState);
     const totalPourTime = totalPourCount * pourTimeoutMs;
 
