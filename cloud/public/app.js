@@ -106,7 +106,7 @@
 
   function formatMl(ml) {
     if (ml == null) return '–';
-    return ml >= 1000 ? (ml / 1000).toFixed(1) + ' L' : ml + ' ml';
+    return ml + ' ml'; // always millilitres, never litres
   }
 
   function formatRelative(iso) {
@@ -386,17 +386,15 @@
     var list = $('d-bottles');
     list.innerHTML = '';
     var bottles = (device && device.bottles) || [];
-    var bottleCounters = (device && device.bottleCounters) || {};
     if (!bottles.length) list.innerHTML = '<li class="empty-state">No bottles reported.</li>';
     bottles.forEach(function (b) {
       var ratio = b.originalCapacityMl > 0 ? b.capacityMl / b.originalCapacityMl : 0;
       var percent = Math.max(0, Math.min(1, ratio)) * 100;
-      var counter = bottleCounters[b.name] || bottleCounters[String(b.name).toUpperCase()];
       list.appendChild(
         el('li', {class: 'bottle-row'}, [
           el('span', {class: 'bottle-row__name', text: (b.slot + 1) + '. ' + b.name}),
           el('span', {class: 'bottle-row__track'}, [el('span', {class: 'bottle-row__fill' + (ratio <= LOW_FILL ? ' bottle-row__fill--low' : ''), style: 'width:' + percent.toFixed(0) + '%'})]),
-          el('span', {class: 'bottle-row__value', text: formatMl(b.capacityMl) + (counter ? ' · ' + counter.pours + ' pours' : '')}),
+          el('span', {class: 'bottle-row__value', text: formatMl(b.capacityMl)}),
         ])
       );
     });
