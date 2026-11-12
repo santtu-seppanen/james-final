@@ -596,12 +596,6 @@ img {
   color: var(--text-muted);
 }
 
-.orbit__fresh {
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--accent);
-}
-
 .home__pour {
   padding: 8px 20px 20px;
   display: flex;
@@ -2452,4 +2446,110 @@ img {
 .done__art {
   -webkit-mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
   mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
+}
+
+/* ------------------------------------------------------------------------
+   AI drink page: picture, ingredients with amounts, Add drink / Abandon
+   ------------------------------------------------------------------------ */
+.ai-drink {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 20px 20px;
+  text-align: center;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at 50% 22%, var(--drink-soft, rgba(27, 149, 224, 0.2)), transparent 60%), var(--bg);
+}
+
+.ai-drink__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.ai-drink__art {
+  flex: 1 1 0;
+  min-height: 120px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-drink__art img {
+  max-width: 70%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 28px var(--drink)) drop-shadow(0 8px 16px rgba(0, 0, 0, 0.55));
+}
+
+.ai-drink__name {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.05;
+  font-weight: 800;
+}
+
+.ai-drink__ingredients {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 420px;
+}
+
+.ai-drink__ingredients li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.ai-drink__ingredient-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-transform: capitalize;
+}
+
+.ai-drink__hand {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+
+.ai-drink__ml {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-2);
+}
+
+.ai-drink__total {
+  color: var(--text-muted);
+  font-size: 16px !important;
+  border-bottom: 0 !important;
+}
+
+.ai-drink__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  width: 100%;
+  max-width: 420px;
 }

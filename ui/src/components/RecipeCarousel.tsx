@@ -9,8 +9,6 @@ interface Props {
   recipes: Recipe[];
   index: number;
   onIndex: (index: number) => void;
-  // The AI drink that isn't on the menu yet, if it's in the ring.
-  fresh?: Recipe | null;
 }
 
 // A ring of drink pictures seen at an angle: the drink in front is big and
@@ -66,7 +64,7 @@ function layOutRing(count: number, imageSize: number, gap: number, radiusY: numb
   return {radiusX, angles: angles.map((a, i) => (a * 2 * Math.PI) / end || (i === 0 ? 0 : a))};
 }
 
-export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
+export function RecipeCarousel({recipes, index, onIndex}: Props) {
   const stage = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({w: 0, h: 0});
   const rotation = useContext(StageRotation);
@@ -189,7 +187,6 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
       <div className="orbit__info" aria-live="polite">
         <p className="orbit__title">{current.friendlyname}</p>
         <p className="orbit__ingredients">{current.subtitle ?? current.ingredients.map((ing) => ing.name).join(' · ')}</p>
-        {fresh && current === fresh && <p className="orbit__fresh">Fresh from the AI - pour it and it joins the menu</p>}
       </div>
     </div>
   );

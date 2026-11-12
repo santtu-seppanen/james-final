@@ -34,3 +34,22 @@ export function recipeImage(recipe: {imageUrl?: string}): string {
   }
   return (recipe.imageUrl && drinkImages[recipe.imageUrl]) || fallbackDrinkImage;
 }
+
+// AI drinks come without a picture: borrow the one that fits the main spirit.
+const AI_PICTURES: [RegExp, string][] = [
+  [/vodka/i, 'vodka'],
+  [/whisk/i, 'whiskey'],
+  [/rum/i, 'rum_coke'],
+  [/gin/i, 'gin_tonic'],
+  [/tequila/i, 'margarita'],
+  [/cranberry/i, 'red_drink'],
+];
+
+export function aiDrinkPicture(ingredients: {name: string; manual?: boolean}[]): string {
+  for (const ing of ingredients) {
+    if (ing.manual) continue;
+    const hit = AI_PICTURES.find(([pattern]) => pattern.test(ing.name));
+    if (hit && drinkImages[hit[1]]) return hit[1];
+  }
+  return 'drink';
+}

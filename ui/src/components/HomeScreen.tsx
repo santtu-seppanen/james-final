@@ -9,21 +9,24 @@ import {Icon} from './Icon';
 interface Props {
   bottles: Bottle[];
   recipes: Recipe[];
-  // An AI drink waiting in the ring, not yet on the menu.
-  aiDrink: Recipe | null;
-  onAiDrink: (recipe: Recipe | null) => void;
+  // Menu id of a drink the ring should open on (one just added from the AI page).
+  focusDrink: string | null;
+  // The AI invented a drink: App shows it on its own page.
+  onAiDrink: (recipe: Recipe) => void;
   // "5 viinaa": shot glasses instead of one glass, one bottle at a time.
   shotMode: boolean;
   onShotMode: (on: boolean) => void;
   // Starts the pour flow (which first asks for the glass).
-  onPour: (recipe: Recipe, isAi: boolean) => void;
+  onPour: (recipe: Recipe) => void;
 }
 
 const SPIN_MS = 4000; // the ring turns by itself ...
 const PAUSE_MS = 12000; // ... except for this long after someone touches it
 
-export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onShotMode, onPour}: Props) {
-  const [index, setIndex] = useState(0);
+export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, onShotMode, onPour}: Props) {
+  const [index, setIndex] = useState(() =>
+    Math.max(0, recipes.filter((r) => availability(r, bottles).pourable).findIndex((r) => r.name === focusDrink)),
+  );
   const [aiState, setAiState] = useState<'idle' | 'thinking' | 'failed'>('idle');
   const [aiError, setAiError] = useState('');
   // Cancelling just ignores the answer when it arrives - the request
@@ -32,7 +35,7 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
   const lastTouch = useRef(0);
 
   const pourable = shotMode ? shotRecipes(bottles) : recipes.filter((r) => availability(r, bottles).pourable);
-  const items = aiDrink && !shotMode ? [aiDrink, ...pourable] : pourable;
+  const items = pourable;
   const front = items.length > 0 ? ((index % items.length) + items.length) % items.length : 0;
 
   const touch = () => {
@@ -64,7 +67,6 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
       if (id !== aiRequest.current) return;
       setAiState('idle');
       onAiDrink(recipe);
-      setIndex(0);
     } catch (e) {
       if (id !== aiRequest.current) return;
       setAiState('failed');
@@ -79,7 +81,7 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
 
   function pour() {
     const recipe = items[front];
-    if (recipe) onPour(recipe, recipe === aiDrink);
+    if (recipe) onPour(recipe);
   }
 
   return (
@@ -103,7 +105,7 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
         )}
       </div>
 
-      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} fresh={aiDrink} />
+      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} />
 
       <div className="home__pour">
         <button

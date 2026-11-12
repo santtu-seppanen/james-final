@@ -7,13 +7,11 @@ import {Icon} from './Icon';
 
 interface Props {
   recipe: Recipe;
-  // Set once an AI drink has been added to the menu after serving.
-  savedAs: string | null;
   autoReturnSeconds: number;
   onHome: () => void;
 }
 
-export function DoneScreen({recipe, savedAs, autoReturnSeconds, onHome}: Props) {
+export function DoneScreen({recipe, autoReturnSeconds, onHome}: Props) {
   const manual = recipe.ingredients.filter((i) => i.manual);
   const color = rgbString(drinkColor(recipe));
   const progress = useProgress(autoReturnSeconds * 1000, true);
@@ -46,11 +44,6 @@ export function DoneScreen({recipe, savedAs, autoReturnSeconds, onHome}: Props) 
                 </li>
               )}
             </ul>
-          )}
-          {savedAs && (
-            <p className="notice notice--ok" role="status">
-              <Icon name="check" /> Added to the menu as “{savedAs}”.
-            </p>
           )}
         </div>
       </div>

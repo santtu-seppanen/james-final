@@ -299,6 +299,8 @@ function pourDrink(recipe) {
       drinksSplits.push(drinkSplit);
     }
     for (let ingredient of recipe.ingredients) {
+      // Fizzy mixers are poured by hand, even if a bottle of it is loaded.
+      if (ingredient.manual) continue;
       bottles.forEach(function (bottle, i) {
         if (checkBottleName(bottle.name, ingredient.name)) {
           const pourCount = ingredient.serving / bottle.serving;

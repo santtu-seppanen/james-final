@@ -2,10 +2,11 @@ import {useEffect, useRef, useState} from 'react';
 import io, {type Socket} from 'socket.io-client';
 // Socket's shape comes from src/socketio-client.d.ts.
 import type {Bottle, PourResult, Recipe, ServoStateEvent} from './types';
-import {API_BASE, getBottles, getRecipes, getVersion, pourAdHoc, pourByName, pourShots, saveRecipe} from './api';
+import {API_BASE, getBottles, getRecipes, getVersion, pourByName, pourShots, saveRecipe} from './api';
 import {DONE_SECONDS} from './config';
 import {humanPourError} from './pourError';
 import {shotBottleName} from './shots';
+import {AiDrinkScreen} from './components/AiDrinkScreen';
 import {HomeScreen} from './components/HomeScreen';
 import {PouringScreen} from './components/PouringScreen';
 import {DoneScreen} from './components/DoneScreen';
@@ -13,10 +14,11 @@ import {GlassPrompt} from './components/GlassPrompt';
 import {LoadingScreen, LockedScreen, OfflineScreen} from './components/SystemStates';
 
 // The whole guest flow: home (the ring + Pour) -> pouring (first asking for
-// the glass, then the countdown) -> done -> home.
+// the glass, then the countdown) -> done -> home. An AI drink gets a page
+// of its own between home and the menu ('ai').
 // locked/offline/loading are overlays decided below, so any screen can
 // fall into them.
-type View = 'home' | 'pouring' | 'done';
+type View = 'home' | 'ai' | 'pouring' | 'done';
 
 // How long the socket may be down before we admit the backend is gone -
 // deploy.sh restarts it in well under this, and a flash of "offline"
@@ -37,10 +39,9 @@ export default function App() {
   const [locked, setLocked] = useState(false);
   const [stale, setStale] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<Recipe | null>(null);
-  const [aiDrink, setAiDrink] = useState<Recipe | null>(null);
+  const [aiDrink, setAiDrink] = useState<Recipe | null>(null); // invented, not yet on the menu
+  const [focusDrink, setFocusDrink] = useState<string | null>(null); // menu id the ring opens on
   const [shotMode, setShotMode] = useState(false);
-  const [isAi, setIsAi] = useState(false);
-  const [savedAs, setSavedAs] = useState<string | null>(null);
   const [pour, setPour] = useState<{result: PourResult; show: boolean} | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
@@ -107,17 +108,14 @@ export default function App() {
 
   function goHome() {
     setSelectedDrink(null);
-    setSavedAs(null);
     setPour(null);
     setView('home');
   }
 
   // Pour pressed: show the pour screen with the glass prompt on top. Nothing
   // is poured until the guest confirms the glass (startPour).
-  function beginPour(recipe: Recipe, ai: boolean) {
+  function beginPour(recipe: Recipe) {
     setSelectedDrink(recipe);
-    setIsAi(ai);
-    setSavedAs(null);
     setPour(null);
     setView('pouring');
   }
@@ -130,22 +128,9 @@ export default function App() {
     try {
       const result = shotBottle
         ? await pourShots(shotBottle)
-        : isAi
-          ? await pourAdHoc(recipe)
-          : await pourByName(recipe.name || recipe.friendlyname);
+        : await pourByName(recipe.name || recipe.friendlyname);
       if (!result.success) return humanPourError(result.error);
       setPour({result, show: false});
-      // Serving an AI drink is accepting it: it goes on the menu too. A
-      // failed save never gets in the way of the pour that already started.
-      if (isAi) {
-        setAiDrink(null);
-        saveRecipe(recipe.friendlyname, recipe)
-          .then((saved) => {
-            setRecipes((prev) => [...prev, {...recipe, name: saved.id, friendlyname: saved.friendlyname}]);
-            setSavedAs(saved.friendlyname);
-          })
-          .catch(() => setSavedAs(null));
-      }
       return null;
     } catch (e) {
       return humanPourError(e instanceof Error ? e.message : '');
@@ -183,16 +168,38 @@ export default function App() {
     );
   }
 
+  if (view === 'ai' && aiDrink) {
+    return (
+      <AiDrinkScreen
+        recipe={aiDrink}
+        onAdd={async () => {
+          const saved = await saveRecipe(aiDrink.friendlyname, aiDrink);
+          setRecipes((prev) => [...prev, {...aiDrink, name: saved.id, friendlyname: saved.friendlyname}]);
+          setFocusDrink(saved.id);
+          setAiDrink(null);
+          setView('home');
+        }}
+        onAbandon={() => {
+          setAiDrink(null);
+          setView('home');
+        }}
+      />
+    );
+  }
+
   if (view === 'done' && selectedDrink) {
-    return <DoneScreen recipe={selectedDrink} savedAs={savedAs} autoReturnSeconds={DONE_SECONDS} onHome={goHome} />;
+    return <DoneScreen recipe={selectedDrink} autoReturnSeconds={DONE_SECONDS} onHome={goHome} />;
   }
 
   return (
     <HomeScreen
       bottles={bottles}
       recipes={recipes}
-      aiDrink={aiDrink}
-      onAiDrink={setAiDrink}
+      focusDrink={focusDrink}
+      onAiDrink={(recipe) => {
+        setAiDrink(recipe);
+        setView('ai');
+      }}
       shotMode={shotMode}
       onShotMode={setShotMode}
       onPour={beginPour}

@@ -21,14 +21,19 @@ var PROPOSE_DRINK_TOOL = {
       ingredients: {
         type: 'array',
         minItems: 2,
-        maxItems: 4,
+        maxItems: 5,
         items: {
           type: 'object',
           properties: {
-            name: {type: 'string', description: 'Must exactly match one of the given bottle names.'},
+            name: {type: 'string', description: 'Must exactly match one of the given bottle names, unless it is a fizzy mixer added by hand.'},
             serving: {
               type: 'integer',
-              description: "Total ml of this ingredient - must be a positive multiple of that bottle's own serving size.",
+              description:
+                "Total ml of this ingredient - for a bottle, a positive multiple of that bottle's own serving size; for a fizzy mixer, any multiple of 10.",
+            },
+            manual: {
+              type: 'boolean',
+              description: 'true for a fizzy mixer (soda, tonic, cola, lemonade...) that the guest pours by hand.',
             },
           },
           required: ['name', 'serving'],
@@ -38,6 +43,14 @@ var PROPOSE_DRINK_TOOL = {
     required: ['friendlyname', 'ingredients'],
   },
 };
+
+// Soda, tonic, cola and the like are never poured by the machine: the guest
+// tops the glass up by hand so the fizz isn't shaken flat in the tubes.
+var FIZZY = /soda|tonic|sprite|cola|coke|pepsi|fanta|7up|lemonade|ginger ?(ale|beer)|fizz|sparkl|bubbl|limsa|vissy|kupliva|seltzer|mineral water/i;
+
+function isFizzy(name) {
+  return FIZZY.test(String(name));
+}
 
 var STYLES = [
   'a tall, refreshing long drink',
@@ -80,7 +93,10 @@ function buildPrompt(bottles, existingNames, rand) {
     lines.join('\n') +
     '\n\nPropose one new cocktail using 2-4 of these bottles. Each ingredient amount must be a ' +
     "whole multiple of that bottle's own shot size, and must not exceed what's left in the bottle. " +
-    'Make it ' + style + ', and build it around ' + featured + '.';
+    'Make it ' + style + ', and build it around ' + featured + '. ' +
+    'Fizzy mixers (soda, tonic, cola, lemonade, ginger beer, sparkling water) are never poured by the ' +
+    'machine: you may add one of them, any amount that is a multiple of 10 ml, marked manual: true. ' +
+    'It does not have to be in the bottle list. Every other ingredient must be a bottle from the list.';
 
   if (existingNames && existingNames.length > 0) {
     prompt += ' These drinks are already on the menu, so do not suggest them or close variants: ' +
@@ -99,19 +115,31 @@ function validateRecipe(recipe, bottlesByName) {
   }
 
   var seen = {};
+  var machineIngredients = 0;
   for (var i = 0; i < recipe.ingredients.length; i++) {
     var ing = recipe.ingredients[i];
-    var bottle = bottlesByName[String(ing.name).toUpperCase()];
+    var key = String(ing.name).toUpperCase();
+    var serving = Number(ing.serving);
 
+    if (seen[key]) {
+      return 'Duplicate ingredient: ' + ing.name;
+    }
+    seen[key] = true;
+
+    // Poured by hand: no bottle to check, any sensible amount.
+    if (ing.manual) {
+      if (!serving || serving <= 0) {
+        return ing.name + ': serving must be positive';
+      }
+      continue;
+    }
+
+    var bottle = bottlesByName[key];
     if (!bottle) {
       return 'Unknown bottle: ' + ing.name;
     }
-    if (seen[bottle.name]) {
-      return 'Duplicate ingredient: ' + ing.name;
-    }
-    seen[bottle.name] = true;
+    machineIngredients++;
 
-    var serving = Number(ing.serving);
     var unit = Number(bottle.serving);
     if (!serving || serving <= 0 || serving % unit !== 0) {
       return ing.name + ': serving must be a multiple of ' + unit + 'ml';
@@ -119,6 +147,9 @@ function validateRecipe(recipe, bottlesByName) {
     if (serving > Number(bottle.capacity)) {
       return ing.name + ': not enough left (' + bottle.capacity + 'ml)';
     }
+  }
+  if (machineIngredients === 0) {
+    return 'Needs at least one bottle ingredient';
   }
 
   return null;
@@ -134,7 +165,7 @@ function generateDrink(allBottles, existingNames) {
 
   // "empty" is the placeholder for an unused slot, and a dry bottle can't pour.
   var bottles = allBottles.filter(function (b) {
-    return String(b.name).toLowerCase() !== 'empty' && Number(b.capacity) > 0;
+    return String(b.name).toLowerCase() !== 'empty' && Number(b.capacity) > 0 && !isFizzy(b.name);
   });
   if (bottles.length < 2) {
     return Promise.reject(new Error('Need at least two loaded bottles'));
@@ -178,14 +209,21 @@ function generateDrink(allBottles, existingNames) {
       }
 
       var recipe = toolUse.input;
+      (recipe.ingredients || []).forEach(function (ing) {
+        if (isFizzy(ing.name)) ing.manual = true;
+      });
       var validationError = validateRecipe(recipe, bottlesByName);
       if (validationError) {
         throw new Error('Invalid AI recipe: ' + validationError);
       }
 
       // Normalize to exactly matching bottle names/casing and plain numbers.
+      // Anything fizzy is by hand, whatever the model said.
       recipe.ingredients = recipe.ingredients.map(function (ing) {
         var bottle = bottlesByName[String(ing.name).toUpperCase()];
+        if (ing.manual || isFizzy(ing.name)) {
+          return {name: String(ing.name).toLowerCase().trim(), serving: Number(ing.serving), manual: true};
+        }
         return {name: bottle.name, serving: Number(ing.serving)};
       });
 
@@ -193,4 +231,9 @@ function generateDrink(allBottles, existingNames) {
     });
 }
 
-module.exports = {generateDrink: generateDrink, validateRecipe: validateRecipe, buildPrompt: buildPrompt};
+module.exports = {
+  generateDrink: generateDrink,
+  validateRecipe: validateRecipe,
+  buildPrompt: buildPrompt,
+  isFizzy: isFizzy,
+};

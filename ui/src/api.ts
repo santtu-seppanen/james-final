@@ -1,4 +1,5 @@
 import type {Bottle, PourResult, Recipe} from './types';
+import {aiDrinkPicture} from './images';
 
 // The kiosk browser and the backend both run on the Pi, but on different
 // ports served by different things (nghttpx on :3000 only proxies to the
@@ -65,7 +66,8 @@ export function generateAiDrink(): Promise<Recipe> {
     if (!response.ok) {
       throw new Error(body.error || 'Failed to generate a drink');
     }
-    return body as Recipe;
+    const recipe = body as Recipe;
+    return {...recipe, imageUrl: recipe.imageUrl || aiDrinkPicture(recipe.ingredients)};
   });
 }
 

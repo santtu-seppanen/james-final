@@ -1,4 +1,4 @@
-const {validateRecipe, buildPrompt} = require('./ai');
+const {validateRecipe, buildPrompt, isFizzy} = require('./ai');
 
 const bottlesByName = {
   VODKA: {name: 'vodka', capacity: 500, serving: 25},
@@ -91,5 +91,28 @@ describe('buildPrompt', () => {
   it('still mentions every bottle', () => {
     const prompt = buildPrompt(bottles, [], seq(0.3));
     bottles.forEach((b) => expect(prompt).toContain('- ' + b.name + ':'));
+  });
+});
+
+describe('fizzy mixers', () => {
+  it('recognises soda, tonic, cola and friends', () => {
+    ['tonic', 'Sprite', 'grapefruitsoda', 'coke', 'ginger beer', 'lemonade'].forEach((n) => expect(isFizzy(n)).toBe(true));
+    ['vodka', 'cranberry', 'orangejuice'].forEach((n) => expect(isFizzy(n)).toBe(false));
+  });
+
+  it('accepts a by-hand ingredient that is not in any bottle', () => {
+    const recipe = {
+      friendlyname: 'Test Drink',
+      ingredients: [
+        {name: 'vodka', serving: 50},
+        {name: 'cola', serving: 120, manual: true},
+      ],
+    };
+    expect(validateRecipe(recipe, bottlesByName)).toBeNull();
+  });
+
+  it('needs at least one bottle ingredient', () => {
+    const recipe = {friendlyname: 'Test Drink', ingredients: [{name: 'cola', serving: 120, manual: true}]};
+    expect(validateRecipe(recipe, bottlesByName)).toMatch(/at least one bottle/);
   });
 });
