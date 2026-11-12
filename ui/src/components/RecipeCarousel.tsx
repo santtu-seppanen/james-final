@@ -57,8 +57,11 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const position = front - drag; // fractional while dragging
   const step = (2 * Math.PI) / Math.max(count, MIN_SLOTS);
   const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
-  const radiusX = size.w * 0.62; // wide: the side drinks run off the edges of the screen
-  const radiusY = size.h * 0.2;
+  // The ring is as wide as the menu is long: a few drinks huddle near the
+  // front, a full menu spreads past the edges of the screen.
+  const spread = Math.min(1, (count - 1) / 8);
+  const radiusX = size.w * (0.16 + 0.46 * spread);
+  const radiusY = size.h * (0.06 + 0.14 * spread);
   const current = recipes[front];
 
   // Along the portrait horizontal, whatever the screen is doing underneath.
@@ -138,7 +141,7 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
 
       <div className="orbit__info" aria-live="polite">
         <p className="orbit__title">{current.friendlyname}</p>
-        <p className="orbit__ingredients">{current.ingredients.map((ing) => ing.name).join(' · ')}</p>
+        <p className="orbit__ingredients">{current.subtitle ?? current.ingredients.map((ing) => ing.name).join(' · ')}</p>
         {fresh && current === fresh && <p className="orbit__fresh">Fresh from the AI - pour it and it joins the menu</p>}
       </div>
     </div>

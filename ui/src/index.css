@@ -2349,3 +2349,69 @@ img {
 .done__actions {
   justify-content: center;
 }
+
+/* ------------------------------------------------------------------------
+   Home: centred controls, the "5 viinaa" switch, glass prompt
+   ------------------------------------------------------------------------ */
+.home__top {
+  justify-content: center;
+}
+
+.home__mode {
+  display: flex;
+  justify-content: center;
+  padding-bottom: 6px;
+}
+
+.switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--touch);
+  padding: 0 8px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.switch__track {
+  position: relative;
+  width: 64px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  transition: background 0.2s ease;
+}
+
+.switch__knob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.switch--on .switch__track {
+  background: var(--accent);
+}
+
+.switch--on .switch__knob {
+  transform: translateX(28px);
+}
+
+.modal--glass .modal__actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* Drink pictures elsewhere get the same feathered edge as in the ring. */
+.pouring__thumb,
+.done__art {
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
+  mask-image: radial-gradient(ellipse at center, #000 52%, transparent 74%);
+}

@@ -27,6 +27,10 @@ export const bottleImages = toNameMap(bottleModules);
 export const fallbackDrinkImage = drinkImages['drink'];
 export const fallbackBottleImage = bottleImages['bottle'];
 
+// 'bottle:vodka' points at a bottle picture (shot mode); anything else is a drink picture.
 export function recipeImage(recipe: {imageUrl?: string}): string {
+  if (recipe.imageUrl && recipe.imageUrl.startsWith('bottle:')) {
+    return bottleImages[recipe.imageUrl.slice(7).toLowerCase()] || fallbackBottleImage;
+  }
   return (recipe.imageUrl && drinkImages[recipe.imageUrl]) || fallbackDrinkImage;
 }

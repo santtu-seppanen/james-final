@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import type {Bottle, Recipe} from '../types';
 import {generateAiDrink} from '../api';
 import {availability} from '../drinkColor';
+import {shotRecipes} from '../shots';
 import {RecipeCarousel} from './RecipeCarousel';
 import {Icon} from './Icon';
 
@@ -11,17 +12,18 @@ interface Props {
   // An AI drink waiting in the ring, not yet on the menu.
   aiDrink: Recipe | null;
   onAiDrink: (recipe: Recipe | null) => void;
-  // Pours the drink; resolves to an error message, or null when it started.
-  onServe: (recipe: Recipe, isAi: boolean) => Promise<string | null>;
+  // "5 viinaa": shot glasses instead of one glass, one bottle at a time.
+  shotMode: boolean;
+  onShotMode: (on: boolean) => void;
+  // Starts the pour flow (which first asks for the glass).
+  onPour: (recipe: Recipe, isAi: boolean) => void;
 }
 
 const SPIN_MS = 4000; // the ring turns by itself ...
 const PAUSE_MS = 12000; // ... except for this long after someone touches it
 
-export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, onServe}: Props) {
+export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onShotMode, onPour}: Props) {
   const [index, setIndex] = useState(0);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
   const [aiState, setAiState] = useState<'idle' | 'thinking' | 'failed'>('idle');
   const [aiError, setAiError] = useState('');
   // Cancelling just ignores the answer when it arrives - the request
@@ -29,22 +31,21 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, onServe}: Prop
   const aiRequest = useRef(0);
   const lastTouch = useRef(0);
 
-  const pourable = recipes.filter((r) => availability(r, bottles).pourable);
-  const items = aiDrink ? [aiDrink, ...pourable] : pourable;
+  const pourable = shotMode ? shotRecipes(bottles) : recipes.filter((r) => availability(r, bottles).pourable);
+  const items = aiDrink && !shotMode ? [aiDrink, ...pourable] : pourable;
   const front = items.length > 0 ? ((index % items.length) + items.length) % items.length : 0;
 
   const touch = () => {
     lastTouch.current = Date.now();
-    setError('');
   };
 
   useEffect(() => {
-    if (items.length < 2 || busy || aiState !== 'idle') return;
+    if (items.length < 2 || aiState !== 'idle') return;
     const id = window.setInterval(() => {
       if (Date.now() - lastTouch.current > PAUSE_MS) setIndex((i) => i + 1);
     }, SPIN_MS);
     return () => window.clearInterval(id);
-  }, [items.length, busy, aiState]);
+  }, [items.length, aiState]);
 
   function surprise() {
     if (pourable.length === 0) return;
@@ -76,15 +77,9 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, onServe}: Prop
     setAiState('idle');
   }
 
-  async function pour() {
+  function pour() {
     const recipe = items[front];
-    if (!recipe || busy) return;
-    setBusy(true);
-    setError('');
-    const problem = await onServe(recipe, recipe === aiDrink);
-    // On success App has already moved on to the pouring screen.
-    if (problem) setError(problem);
-    setBusy(false);
+    if (recipe) onPour(recipe, recipe === aiDrink);
   }
 
   return (
@@ -94,28 +89,42 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, onServe}: Prop
           className="pill pill--surprise"
           onClick={surprise}
           disabled={pourable.length === 0}
-          aria-label="Surprise me: turn the ring to a random drink">
+          aria-label="Surprise me: turn the ring to a random choice">
           <Icon name="sparkles" size={28} /> Surprise me
         </button>
+        {!shotMode && (
+          <button
+            className="pill pill--ai"
+            onClick={aiDrinkRequest}
+            disabled={aiState === 'thinking'}
+            aria-label="AI drink: invent a new cocktail from the loaded bottles">
+            <Icon name="robot" size={28} /> AI drink
+          </button>
+        )}
+      </div>
+
+      <div className="home__mode">
         <button
-          className="pill pill--ai"
-          onClick={aiDrinkRequest}
-          disabled={aiState === 'thinking'}
-          aria-label="AI drink: invent a new cocktail from the loaded bottles">
-          <Icon name="robot" size={28} /> AI drink
+          className={`switch${shotMode ? ' switch--on' : ''}`}
+          role="switch"
+          aria-checked={shotMode}
+          onClick={() => {
+            touch();
+            setIndex(0);
+            onShotMode(!shotMode);
+          }}>
+          <span className="switch__track" aria-hidden="true">
+            <span className="switch__knob" />
+          </span>
+          <span className="switch__label">5 viinaa</span>
         </button>
       </div>
 
       <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} fresh={aiDrink} />
 
       <div className="home__pour">
-        {error && (
-          <p className="notice notice--error" role="alert">
-            <Icon name="warning" /> {error}
-          </p>
-        )}
-        <button className="button button--primary button--xl pour-button" onClick={pour} disabled={busy || items.length === 0}>
-          {busy ? 'Starting…' : 'Pour the drink'}
+        <button className="button button--primary button--xl pour-button" onClick={pour} disabled={items.length === 0}>
+          Pour the drink
         </button>
       </div>
 

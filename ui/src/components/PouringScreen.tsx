@@ -11,7 +11,8 @@ interface Props {
   recipe: Recipe;
   bottles: Bottle[];
   servos: boolean[];
-  result: PourResult;
+  // null while the guest is still setting the glass: nothing is poured yet.
+  result: PourResult | null;
   show: boolean;
   onDone: () => void;
 }
@@ -27,11 +28,12 @@ interface Props {
 // timers on its own, so this screen just has to look right until then.
 export function PouringScreen({recipe, bottles, servos, result, show, onDone}: Props) {
   const color = drinkColor(recipe);
-  const secondsLeft = useCountdown(result.pourTime);
+  const secondsLeft = useCountdown(result ? result.pourTime : 0);
   const [skipped, setSkipped] = useState(false);
   const finished = useRef(false);
 
   useEffect(() => {
+    if (!result) return;
     const id = window.setTimeout(() => {
       finished.current = true;
       onDone();
@@ -40,16 +42,16 @@ export function PouringScreen({recipe, bottles, servos, result, show, onDone}: P
     // onDone identity may change on parent re-render; the timer only needs
     // to fire once for this pour.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result.pourTime]);
+  }, [result]);
 
   // Beat pulse: the backend will return show.bpm once show mode exists
   // (issue #4). Fixed-BPM fallback is silent, as the prompt asks.
-  const bpm = show && !skipped ? (result.show && result.show.bpm) || 120 : 0;
+  const bpm = show && !skipped && result ? (result.show && result.show.bpm) || 120 : 0;
   const beatMs = bpm > 0 ? Math.round(60000 / bpm) : 0;
 
   const activeIndex = servos.findIndex(Boolean);
   const activeBottle = activeIndex >= 0 ? bottles[activeIndex] : undefined;
-  const total = Math.ceil(result.pourTime / 1000);
+  const total = result ? Math.ceil(result.pourTime / 1000) : 0;
   const progress = total > 0 ? 1 - secondsLeft / total : 0;
 
   return (
@@ -69,7 +71,7 @@ export function PouringScreen({recipe, bottles, servos, result, show, onDone}: P
           <p className="pouring__eyebrow">Now pouring</p>
           <h1 className="pouring__name">{recipe.friendlyname}</h1>
         </div>
-        {show && !skipped && result.show && result.show.track && (
+        {show && !skipped && result && result.show && result.show.track && (
           <p className="pouring__track">
             <Icon name="music" /> {result.show.track}
           </p>
@@ -78,10 +80,16 @@ export function PouringScreen({recipe, bottles, servos, result, show, onDone}: P
 
       <div className="pouring__center">
         <div className="pouring__count" role="timer" aria-label={`${secondsLeft} seconds left`}>
-          {secondsLeft}
+          {result ? secondsLeft : '–'}
         </div>
         <p className="pouring__status">
-          {activeBottle && activeBottle.name !== 'empty' ? `Pouring ${activeBottle.name}` : secondsLeft > 0 ? 'Getting ready…' : 'Almost done'}
+          {!result
+            ? 'Waiting for the glass'
+            : activeBottle && activeBottle.name !== 'empty'
+              ? `Pouring ${activeBottle.name}`
+              : secondsLeft > 0
+                ? 'Getting ready…'
+                : 'Almost done'}
         </p>
         <div className="progress" aria-hidden="true">
           <div className="progress__bar" style={{width: `${Math.round(progress * 100)}%`}} />

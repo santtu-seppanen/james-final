@@ -11,6 +11,7 @@ var cors = require("cors");
 var fs = require("fs");
 var exec = require("child_process").exec;
 var aiModule = require("./ai");
+var shots = require("./shots");
 var path = require("path");
 // Live, mutable state (bottle levels, saved recipes, usage metrics) lives
 // outside the git-tracked directory when JAMES_DATA_DIR is set, so that
@@ -218,6 +219,22 @@ app.post("/drinkme", (req, res) => {
   }
 });
 
+// Shot mode: five shot glasses on the belt, filled one at a time from one
+// bottle. Body: {bottle: "vodka"}.
+app.post("/shots", (req, res) => {
+  const wanted = String(req.body.bottle || "").toUpperCase();
+  const choice = shots
+    .shotBottles(bottles, 1)
+    .filter((c) => String(c.bottle.name).toUpperCase() === wanted)[0];
+  if (!choice) {
+    return res.status(400).json(JSON.stringify({ success: false, error: "Unknown bottle" }));
+  }
+  if (!shots.shotBottles(bottles, shots.SHOT_COUNT).some((c) => c.slot === choice.slot)) {
+    return res.status(400).json(JSON.stringify({ success: false, error: "Not enough left in " + choice.bottle.name }));
+  }
+  res.json(JSON.stringify({ success: true, pourTime: pourShots(choice.slot) }));
+});
+
 app.post("/api/generate-drink", (req, res) => {
   let existingNames = [];
   try {
@@ -335,6 +352,41 @@ function pourDrink(recipe) {
   } else {
     return 0;
   }
+}
+
+// Moving the belt one glass along isn't wired to any hardware yet. Set
+// JAMES_BELT_CMD in .env to a shell command that does it; JAMES_BELT_MS is
+// how long that move takes (default 3000).
+const beltMs = Number(process.env.JAMES_BELT_MS) || 3000;
+function advanceBelt() {
+  console.log("belt: advance one glass");
+  if (process.env.JAMES_BELT_CMD) exec(process.env.JAMES_BELT_CMD);
+}
+
+function pourShots(slot) {
+  const bottle = bottles[slot];
+  const plan = shots.planShots({ slotMs: pourTimeoutMs, beltMs: beltMs });
+  var servoState = servos_off();
+  toggleLed(1);
+  plan.fills.forEach((at) => {
+    setTimeout(() => {
+      bottle.capacity = bottle.capacity - bottle.serving;
+      openServo(slot, 4000);
+      servoState[slot] = true;
+      io.emit(socketName, { servos: servoState });
+    }, at);
+    setTimeout(() => {
+      servoState[slot] = false;
+      io.emit(socketName, { servos: servoState, bottles: bottles });
+    }, at + pourTimeoutMs);
+  });
+  plan.belts.forEach((at) => setTimeout(advanceBelt, at));
+  setTimeout(() => toggleLed(0), plan.totalMs);
+  return plan.totalMs;
+}
+
+function servos_off() {
+  return Object.keys(servos).map(() => false);
 }
 
 function sendBottlesUpdateDashboard() {

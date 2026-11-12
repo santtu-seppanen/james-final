@@ -54,6 +54,11 @@ export function pourAdHoc(recipe: Recipe, show = false): Promise<PourResult> {
   return postJson('/drinkme', show ? {recipe, show: true} : {recipe});
 }
 
+// Shot mode: five shot glasses on the belt, filled one at a time from one bottle.
+export function pourShots(bottle: string): Promise<PourResult> {
+  return postJson('/shots', {bottle});
+}
+
 export function generateAiDrink(): Promise<Recipe> {
   return fetch(API_BASE + '/api/generate-drink', {method: 'POST'}).then(async (response) => {
     const body = await response.json();

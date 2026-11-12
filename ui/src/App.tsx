@@ -2,15 +2,18 @@ import {useEffect, useRef, useState} from 'react';
 import io, {type Socket} from 'socket.io-client';
 // Socket's shape comes from src/socketio-client.d.ts.
 import type {Bottle, PourResult, Recipe, ServoStateEvent} from './types';
-import {API_BASE, getBottles, getRecipes, getVersion, pourAdHoc, pourByName, saveRecipe} from './api';
+import {API_BASE, getBottles, getRecipes, getVersion, pourAdHoc, pourByName, pourShots, saveRecipe} from './api';
 import {DONE_SECONDS} from './config';
 import {humanPourError} from './pourError';
+import {shotBottleName} from './shots';
 import {HomeScreen} from './components/HomeScreen';
 import {PouringScreen} from './components/PouringScreen';
 import {DoneScreen} from './components/DoneScreen';
+import {GlassPrompt} from './components/GlassPrompt';
 import {LoadingScreen, LockedScreen, OfflineScreen} from './components/SystemStates';
 
-// The whole guest flow: home (the ring + Pour) -> pouring -> done -> home.
+// The whole guest flow: home (the ring + Pour) -> pouring (first asking for
+// the glass, then the countdown) -> done -> home.
 // locked/offline/loading are overlays decided below, so any screen can
 // fall into them.
 type View = 'home' | 'pouring' | 'done';
@@ -35,6 +38,8 @@ export default function App() {
   const [stale, setStale] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState<Recipe | null>(null);
   const [aiDrink, setAiDrink] = useState<Recipe | null>(null);
+  const [shotMode, setShotMode] = useState(false);
+  const [isAi, setIsAi] = useState(false);
   const [savedAs, setSavedAs] = useState<string | null>(null);
   const [pour, setPour] = useState<{result: PourResult; show: boolean} | null>(null);
   const socketRef = useRef<Socket | null>(null);
@@ -107,14 +112,29 @@ export default function App() {
     setView('home');
   }
 
+  // Pour pressed: show the pour screen with the glass prompt on top. Nothing
+  // is poured until the guest confirms the glass (startPour).
+  function beginPour(recipe: Recipe, ai: boolean) {
+    setSelectedDrink(recipe);
+    setIsAi(ai);
+    setSavedAs(null);
+    setPour(null);
+    setView('pouring');
+  }
+
   // Resolves to an error message, or null once the pour has started.
-  async function serve(recipe: Recipe, isAi: boolean): Promise<string | null> {
+  async function startPour(): Promise<string | null> {
+    const recipe = selectedDrink;
+    if (!recipe) return humanPourError();
+    const shotBottle = shotBottleName(recipe);
     try {
-      const result = isAi ? await pourAdHoc(recipe) : await pourByName(recipe.name || recipe.friendlyname);
+      const result = shotBottle
+        ? await pourShots(shotBottle)
+        : isAi
+          ? await pourAdHoc(recipe)
+          : await pourByName(recipe.name || recipe.friendlyname);
       if (!result.success) return humanPourError(result.error);
-      setSelectedDrink(recipe);
       setPour({result, show: false});
-      setView('pouring');
       // Serving an AI drink is accepting it: it goes on the menu too. A
       // failed save never gets in the way of the pour that already started.
       if (isAi) {
@@ -146,16 +166,20 @@ export default function App() {
     return <LoadingScreen />;
   }
 
-  if (view === 'pouring' && selectedDrink && pour) {
+  if (view === 'pouring' && selectedDrink) {
     return (
-      <PouringScreen
-        recipe={selectedDrink}
-        bottles={bottles}
-        servos={servos}
-        result={pour.result}
-        show={pour.show}
-        onDone={() => setView('done')}
-      />
+      <>
+        <PouringScreen
+          key={pour ? 'pour' : 'wait'}
+          recipe={selectedDrink}
+          bottles={bottles}
+          servos={servos}
+          result={pour ? pour.result : null}
+          show={false}
+          onDone={() => setView('done')}
+        />
+        {!pour && <GlassPrompt shots={shotBottleName(selectedDrink) !== null} onConfirm={startPour} onCancel={goHome} />}
+      </>
     );
   }
 
@@ -163,5 +187,15 @@ export default function App() {
     return <DoneScreen recipe={selectedDrink} savedAs={savedAs} autoReturnSeconds={DONE_SECONDS} onHome={goHome} />;
   }
 
-  return <HomeScreen bottles={bottles} recipes={recipes} aiDrink={aiDrink} onAiDrink={setAiDrink} onServe={serve} />;
+  return (
+    <HomeScreen
+      bottles={bottles}
+      recipes={recipes}
+      aiDrink={aiDrink}
+      onAiDrink={setAiDrink}
+      shotMode={shotMode}
+      onShotMode={setShotMode}
+      onPour={beginPour}
+    />
+  );
 }

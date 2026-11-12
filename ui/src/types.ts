@@ -24,6 +24,8 @@ export interface Recipe {
   // after pouring ("lime wedge"), and a hex colour that overrides the one
   // guessed from the ingredients (src/drinkColor.ts).
   garnish?: string;
+  // UI-only line shown under the name instead of the ingredient list (shot mode).
+  subtitle?: string;
   color?: string;
 }
 
