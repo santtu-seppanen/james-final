@@ -1,4 +1,4 @@
-import {useContext, useLayoutEffect, useRef, useState} from 'react';
+import {useContext, useLayoutEffect, useMemo, useRef, useState} from 'react';
 import {StageRotation} from '../stageRotation';
 import type {Recipe} from '../types';
 import {recipeImage} from '../images';
@@ -17,13 +17,54 @@ interface Props {
 // glowing, the rest curve away behind it. No cards, no frames. Only the
 // front drink is named, with its ingredients underneath. Whatever is in
 // front is what the Pour button serves.
-const MIN_SLOTS = 9; // keep it looking like a ring with only a few drinks
 const PX_PER_DRINK = 90; // how far a finger drags the ring by one drink
 const TAP_SLOP_PX = 8;
 const GAP_FRACTION = 0.05; // empty space between neighbouring drinks, of the width
-const MAX_RADIUS = 0.8; // widest the ring gets, of the screen width
 const SCALE_MIN = 0.42;
 const SCALE_RANGE = 0.58;
+
+// Where each drink sits on the ring, as an angle (0 = front, 2π = back round
+// to the front again). Drinks are placed one after another along the ellipse
+// so the empty space between neighbouring pictures is `gap` everywhere, front
+// and back alike; the ring's width is then found so that the last gap closes
+// exactly on the front drink: it grows or shrinks to fit however many drinks
+// there are. Returns the angles for slots 0..count (slot `count` is 2π) and
+// the half width of the ring.
+function layOutRing(count: number, imageSize: number, gap: number, radiusY: number) {
+  const sizeAt = (angle: number) => imageSize * (SCALE_MIN + (SCALE_RANGE * (Math.cos(angle) + 1)) / 2);
+  const DT = 0.004;
+  // Walk round the ring for a given half width; returns the angle after `count` drinks.
+  const walk = (radiusX: number, angles?: number[]) => {
+    let angle = 0;
+    angles?.push(0);
+    for (let i = 0; i < count; i++) {
+      const from = angle;
+      let arc = 0;
+      while (angle < 2 * Math.PI + 0.5) {
+        const mid = angle + DT / 2;
+        arc += Math.hypot(radiusX * Math.cos(mid), radiusY * Math.sin(mid)) * DT;
+        angle += DT;
+        if (arc >= (sizeAt(from) + sizeAt(angle)) / 2 + gap) break;
+      }
+      angles?.push(angle);
+    }
+    return angle;
+  };
+  // The walk ends earlier the wider the ring, so bisect on the width.
+  let lo = 1;
+  let hi = (count * (imageSize + gap)) / 2; // far wider than needed
+  for (let n = 0; n < 30; n++) {
+    const mid = (lo + hi) / 2;
+    if (walk(mid) > 2 * Math.PI) lo = mid;
+    else hi = mid;
+  }
+  const radiusX = (lo + hi) / 2;
+  const angles: number[] = [];
+  walk(radiusX, angles);
+  // Spread the tiny leftover so slot `count` is exactly the front again.
+  const end = angles[count];
+  return {radiusX, angles: angles.map((a, i) => (a * 2 * Math.PI) / end || (i === 0 ? 0 : a))};
+}
 
 export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const stage = useRef<HTMLDivElement>(null);
@@ -47,6 +88,15 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
     return () => observer.disconnect();
   }, [hasCards]);
 
+  const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
+  const spread = Math.min(1, (count - 1) / 8);
+  const radiusY = size.h * (0.06 + 0.14 * spread);
+  const gap = size.w * GAP_FRACTION;
+  const ring = useMemo(
+    () => (count > 0 && size.w > 0 ? layOutRing(count, imageSize, gap, radiusY) : {radiusX: 0, angles: [0, 2 * Math.PI]}),
+    [count, imageSize, gap, radiusY, size.w],
+  );
+
   if (count === 0) {
     return (
       <div className="empty-state" role="status">
@@ -59,17 +109,6 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
 
   const front = ((index % count) + count) % count;
   const position = front - drag; // fractional while dragging
-  const step = (2 * Math.PI) / Math.max(count, MIN_SLOTS);
-  const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
-  // A real ring seen at an angle. Its width is picked so the drinks next to
-  // the front one sit a comfortable gap away from it (edge to edge); the rest
-  // follow round the circle and come back behind.
-  const spread = Math.min(1, (count - 1) / 8);
-  const radiusY = size.h * (0.06 + 0.14 * spread);
-  const gap = size.w * GAP_FRACTION;
-  const meanScale = SCALE_MIN + SCALE_RANGE / 2;
-  const neighbour = (meanScale * imageSize + gap) + ((SCALE_RANGE / 2) * imageSize * Math.sin(step)) / step;
-  const radiusX = Math.min(neighbour / Math.sin(step), size.w * MAX_RADIUS);
   const current = recipes[front];
 
   // Along the portrait horizontal, whatever the screen is doing underneath.
@@ -114,13 +153,13 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
         onPointerCancel={() => onPointerEnd(false)}>
         {size.w > 0 &&
           recipes.map((recipe, i) => {
-            // Signed distance from the front, wrapped to the shorter way round.
-            let delta = i - position;
-            if (delta > count / 2) delta -= count;
-            if (delta < -count / 2) delta += count;
-            const angle = delta * step;
+            // How many drinks round the ring this one is from the front, then
+            // the angle between the two slots it is between.
+            const slot = (((i - position) % count) + count) % count;
+            const j = Math.min(Math.floor(slot), count - 1);
+            const angle = ring.angles[j] + (ring.angles[j + 1] - ring.angles[j]) * (slot - j);
             const depth = (Math.cos(angle) + 1) / 2; // 1 at the front, 0 at the back
-            const x = Math.sin(angle) * radiusX;
+            const x = Math.sin(angle) * ring.radiusX;
             const y = (Math.cos(angle) - 0.35) * radiusY;
             const scale = SCALE_MIN + SCALE_RANGE * depth;
             const isFront = i === front;

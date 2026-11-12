@@ -120,10 +120,7 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
               <span key={i} className="shot-toggle__glass" style={{transitionDelay: `${i * 50}ms`}} />
             ))}
           </span>
-          <span className="shot-toggle__text">
-            <span className="shot-toggle__name">5 shot mode</span>
-            <span className="shot-toggle__hint">{shotMode ? 'One bottle, five shots' : 'Tap for five shots'}</span>
-          </span>
+          <span className="shot-toggle__name">shot mode</span>
         </button>
         <button className="button button--primary button--xl pour-button" onClick={pour} disabled={items.length === 0}>
           Pour the drink
