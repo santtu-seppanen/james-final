@@ -1,6 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
 import type {Bottle, Recipe} from '../types';
-import {generateAiDrink} from '../api';
 import {availability} from '../drinkColor';
 import {SHOT_COUNT, shotRecipes} from '../shots';
 import {RecipeCarousel} from './RecipeCarousel';
@@ -11,8 +10,8 @@ interface Props {
   recipes: Recipe[];
   // Menu id of a drink the ring should open on (one just added from the AI page).
   focusDrink: string | null;
-  // The AI invented a drink: App shows it on its own page.
-  onAiDrink: (recipe: Recipe) => void;
+  // The AI drink was poured: App opens its page right away and fills it in when James is done.
+  onInvent: () => void;
   // "5 viinaa": shot glasses instead of one glass, one bottle at a time.
   shotMode: boolean;
   onShotMode: (on: boolean) => void;
@@ -33,15 +32,10 @@ const AI_ITEM: Recipe = {
 const SPIN_MS = 4000; // the ring turns by itself ...
 const PAUSE_MS = 12000; // ... except for this long after someone touches it
 
-export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, onShotMode, onPour}: Props) {
+export function HomeScreen({bottles, recipes, focusDrink, onInvent, shotMode, onShotMode, onPour}: Props) {
   const [index, setIndex] = useState(() =>
     Math.max(0, recipes.filter((r) => availability(r, bottles).pourable).findIndex((r) => r.name === focusDrink)),
   );
-  const [aiState, setAiState] = useState<'idle' | 'thinking' | 'failed'>('idle');
-  const [aiError, setAiError] = useState('');
-  // Cancelling just ignores the answer when it arrives - the request
-  // itself can't be aborted on the server side.
-  const aiRequest = useRef(0);
   const lastTouch = useRef(0);
 
   const pourable = shotMode ? shotRecipes(bottles) : recipes.filter((r) => availability(r, bottles).pourable);
@@ -55,12 +49,12 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
   };
 
   useEffect(() => {
-    if (items.length < 2 || aiState !== 'idle') return;
+    if (items.length < 2) return;
     const id = window.setInterval(() => {
       if (Date.now() - lastTouch.current > PAUSE_MS) setIndex((i) => i + 1);
     }, SPIN_MS);
     return () => window.clearInterval(id);
-  }, [items.length, aiState]);
+  }, [items.length]);
 
   function surprise() {
     if (pourable.length === 0) return;
@@ -69,31 +63,9 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
     setIndex(items.indexOf(pick));
   }
 
-  async function aiDrinkRequest() {
-    touch();
-    const id = ++aiRequest.current;
-    setAiState('thinking');
-    setAiError('');
-    try {
-      const recipe = await generateAiDrink();
-      if (id !== aiRequest.current) return;
-      setAiState('idle');
-      onAiDrink(recipe);
-    } catch (e) {
-      if (id !== aiRequest.current) return;
-      setAiState('failed');
-      setAiError(humanAiError(e instanceof Error ? e.message : ''));
-    }
-  }
-
-  function cancelAi() {
-    aiRequest.current++;
-    setAiState('idle');
-  }
-
   function pour() {
     const recipe = items[front];
-    if (recipe === AI_ITEM) aiDrinkRequest();
+    if (recipe === AI_ITEM) onInvent();
     else if (recipe) onPour(recipe);
   }
 
@@ -132,47 +104,6 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
           {items[front] === AI_ITEM ? 'Invent a drink' : 'Pour the drink'}
         </button>
       </div>
-
-      {aiState !== 'idle' && (
-        <div className="modal-overlay" role="dialog" aria-modal="true" aria-label="AI drink">
-          <div className="modal modal--ai">
-            {aiState === 'thinking' ? (
-              <>
-                <div className="spinner spinner--ai" aria-hidden="true" />
-                <h2 className="modal__title">Mixing up an idea…</h2>
-                <p className="modal__text">James is looking at the bottles and inventing something new.</p>
-                <button className="button button--lg" onClick={cancelAi}>
-                  Never mind
-                </button>
-              </>
-            ) : (
-              <>
-                <Icon name="warning" size={56} className="modal__icon modal__icon--warn" />
-                <h2 className="modal__title">No inspiration right now</h2>
-                <p className="modal__text">{aiError}</p>
-                <div className="modal__actions">
-                  <button className="button button--primary button--lg" onClick={aiDrinkRequest}>
-                    Try again
-                  </button>
-                  <button className="button button--lg" onClick={cancelAi}>
-                    Back to menu
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
-}
-
-// Server errors are developer-facing ("ANTHROPIC_API_KEY not set"); turn
-// the known ones into something a guest can act on. Never JSON.
-function humanAiError(message: string): string {
-  const m = message.toLowerCase();
-  if (m.includes('api_key')) return 'The AI bartender isn’t set up on this machine. Pick a drink from the menu instead.';
-  if (m.includes('two loaded bottles')) return 'Needs at least two loaded bottles to invent something. Ask for a refill.';
-  if (m.includes('fetch') || m.includes('network')) return 'No internet connection for the AI bartender. Pick a drink from the menu instead.';
-  return 'The AI bartender came up empty. Try again, or pick something from the menu.';
 }

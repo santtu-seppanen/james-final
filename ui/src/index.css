@@ -2537,3 +2537,10 @@ img {
   width: 100%;
   max-width: 420px;
 }
+
+.ai-drink__text {
+  margin: 0;
+  max-width: 360px;
+  color: var(--text-2);
+  font-size: 18px;
+}
