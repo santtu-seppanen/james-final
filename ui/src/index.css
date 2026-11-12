@@ -2370,51 +2370,84 @@ img {
   justify-content: center;
 }
 
-.home__mode {
-  display: flex;
-  justify-content: center;
-  padding-bottom: 6px;
+/* "5 shot mode": a chip above the Pour button. Five little shot glasses fill
+   up with amber when it is on. */
+.home__pour {
+  align-items: stretch;
 }
 
-.switch {
+.shot-toggle {
+  align-self: center;
   display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   min-height: var(--touch);
-  padding: 0 8px;
-  border: 0;
-  background: none;
-  color: var(--text);
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.switch__track {
-  position: relative;
-  width: 64px;
-  height: 36px;
+  padding: 8px 22px 8px 16px;
   border-radius: 999px;
+  border: 2px solid var(--surface-3);
+  background: var(--surface-2);
+  color: var(--text-2);
+  text-align: left;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
+}
+
+.shot-toggle:active {
+  transform: scale(0.97);
+}
+
+.shot-toggle--on {
+  border-color: #e8a33a;
+  background: rgba(232, 163, 58, 0.14);
+  box-shadow: 0 0 22px rgba(232, 163, 58, 0.35);
+  color: var(--text);
+}
+
+.shot-toggle__glasses {
+  display: inline-flex;
+  gap: 4px;
+  align-items: flex-end;
+}
+
+/* A tapered shot glass; the amber is the ::after filling it from below. */
+.shot-toggle__glass {
+  position: relative;
+  width: 14px;
+  height: 22px;
+  overflow: hidden;
+  clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
   background: var(--surface-3);
-  transition: background 0.2s ease;
 }
 
-.switch__knob {
+.shot-toggle__glass::after {
+  content: '';
   position: absolute;
-  top: 4px;
-  left: 4px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: #fff;
-  transition: transform 0.2s ease;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 0;
+  background: linear-gradient(#f3b84f, #d8872a);
+  transition: height 0.25s ease;
+  transition-delay: inherit;
 }
 
-.switch--on .switch__track {
-  background: var(--accent);
+.shot-toggle--on .shot-toggle__glass::after {
+  height: 78%;
 }
 
-.switch--on .switch__knob {
-  transform: translateX(28px);
+.shot-toggle__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.shot-toggle__name {
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.shot-toggle__hint {
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 .modal--glass .modal__actions {

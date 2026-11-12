@@ -2,7 +2,7 @@ import {useEffect, useRef, useState} from 'react';
 import type {Bottle, Recipe} from '../types';
 import {generateAiDrink} from '../api';
 import {availability} from '../drinkColor';
-import {shotRecipes} from '../shots';
+import {SHOT_COUNT, shotRecipes} from '../shots';
 import {RecipeCarousel} from './RecipeCarousel';
 import {Icon} from './Icon';
 
@@ -103,9 +103,11 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
         )}
       </div>
 
-      <div className="home__mode">
+      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} fresh={aiDrink} />
+
+      <div className="home__pour">
         <button
-          className={`switch${shotMode ? ' switch--on' : ''}`}
+          className={`shot-toggle${shotMode ? ' shot-toggle--on' : ''}`}
           role="switch"
           aria-checked={shotMode}
           onClick={() => {
@@ -113,16 +115,16 @@ export function HomeScreen({bottles, recipes, aiDrink, onAiDrink, shotMode, onSh
             setIndex(0);
             onShotMode(!shotMode);
           }}>
-          <span className="switch__track" aria-hidden="true">
-            <span className="switch__knob" />
+          <span className="shot-toggle__glasses" aria-hidden="true">
+            {Array.from({length: SHOT_COUNT}, (_, i) => (
+              <span key={i} className="shot-toggle__glass" style={{transitionDelay: `${i * 50}ms`}} />
+            ))}
           </span>
-          <span className="switch__label">5 viinaa</span>
+          <span className="shot-toggle__text">
+            <span className="shot-toggle__name">5 shot mode</span>
+            <span className="shot-toggle__hint">{shotMode ? 'One bottle, five shots' : 'Tap for five shots'}</span>
+          </span>
         </button>
-      </div>
-
-      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} fresh={aiDrink} />
-
-      <div className="home__pour">
         <button className="button button--primary button--xl pour-button" onClick={pour} disabled={items.length === 0}>
           Pour the drink
         </button>
