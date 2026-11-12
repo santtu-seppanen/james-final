@@ -314,7 +314,9 @@ function pourDrink(recipe) {
         const leftOver = step.pours - j;
         const openTimeout = leftOver < 1 ? leftOver * 4000 : 4000;
         setTimeout(() => {
-          bottle.capacity = bottle.capacity - bottle.serving;
+          // bottles can be re-read from disk mid-pour, so look the slot up again.
+          bottles[i].capacity = bottles[i].capacity - bottles[i].serving;
+          saveBottlesSoon();
           openServo(i, openTimeout);
           servoState[i] = true;
           io.emit(socketName, { servos: servoState });
@@ -350,13 +352,13 @@ function advanceBelt() {
 }
 
 function pourShots(slot) {
-  const bottle = bottles[slot];
   const plan = shots.planShots({ slotMs: pourTimeoutMs, beltMs: beltMs });
   var servoState = servos_off();
   toggleLed(1);
   plan.fills.forEach((at) => {
     setTimeout(() => {
-      bottle.capacity = bottle.capacity - bottle.serving;
+      bottles[slot].capacity = bottles[slot].capacity - bottles[slot].serving;
+      saveBottlesSoon();
       openServo(slot, 4000);
       servoState[slot] = true;
       io.emit(socketName, { servos: servoState });
@@ -514,6 +516,24 @@ function openServo(servoNumber, openTime) {
   setTimeout(() => {
     exec(downCommand);
   }, openTime);
+}
+
+// Bottle levels only changed in memory until now, so a restart (every deploy)
+// put every bottle back to full and the cloud dashboard never saw a pour.
+// Write them out shortly after each pour step; one write covers a burst.
+var saveBottlesTimer = null;
+function saveBottlesSoon() {
+  if (saveBottlesTimer) return;
+  saveBottlesTimer = setTimeout(() => {
+    saveBottlesTimer = null;
+    const tmp = bottlesConfig + ".tmp";
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(bottles));
+      fs.renameSync(tmp, bottlesConfig);
+    } catch (e) {
+      console.log("Could not save bottle levels: " + e);
+    }
+  }, 1000);
 }
 
 function checkBottleName(bottleName, ingredientName) {
