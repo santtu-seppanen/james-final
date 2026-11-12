@@ -2360,81 +2360,65 @@ img {
 /* ------------------------------------------------------------------------
    Home: centred controls, the "5 viinaa" switch, glass prompt
    ------------------------------------------------------------------------ */
+/* Three pills in one row: same shape and type, sized to fit side by side. */
 .home__top {
   justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
-/* "5 shot mode": a chip above the Pour button. Five little shot glasses fill
-   up with amber when it is on. */
-.home__pour {
-  align-items: stretch;
+.home__top .pill {
+  min-height: 56px;
+  padding: 0 14px;
+  gap: 8px;
+  font-size: 16px;
+  white-space: nowrap;
 }
 
-.shot-toggle {
-  align-self: center;
+.pill--shot {
+  background: linear-gradient(135deg, #e8a33a, #d8602a);
+  transition: transform 0.08s ease, filter 0.15s ease, box-shadow 0.2s ease;
+}
+
+.pill--shot:not(.pill--on) {
+  filter: saturate(0.6) brightness(0.85);
+}
+
+.pill--on {
+  box-shadow: 0 0 18px rgba(232, 163, 58, 0.55);
+}
+
+.pill__glasses {
   display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  min-height: var(--touch);
-  padding: 10px 28px 8px;
-  border-radius: 20px;
-  border: 2px solid var(--surface-3);
-  background: var(--surface-2);
-  color: var(--text-2);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, color 0.2s ease;
-}
-
-.shot-toggle:active {
-  transform: scale(0.97);
-}
-
-.shot-toggle--on {
-  border-color: #e8a33a;
-  background: rgba(232, 163, 58, 0.14);
-  box-shadow: 0 0 22px rgba(232, 163, 58, 0.35);
-  color: var(--text);
-}
-
-.shot-toggle__glasses {
-  display: inline-flex;
-  gap: 6px;
+  gap: 2px;
   align-items: flex-end;
 }
 
-/* A tapered shot glass; the amber is the ::after filling it from below. */
-.shot-toggle__glass {
+/* A tapered shot glass; the fill rises when the mode is on. */
+.pill__glass {
   position: relative;
-  width: 20px;
-  height: 32px;
+  width: 9px;
+  height: 18px;
   overflow: hidden;
   clip-path: polygon(0 0, 100% 0, 82% 100%, 18% 100%);
-  background: var(--surface-3);
+  background: rgba(255, 255, 255, 0.35);
 }
 
-.shot-toggle__glass::after {
+.pill__glass::after {
   content: '';
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
   height: 0;
-  background: linear-gradient(#f3b84f, #d8872a);
+  background: #fff;
   transition: height 0.25s ease;
   transition-delay: inherit;
 }
 
-.shot-toggle--on .shot-toggle__glass::after {
+.pill--on .pill__glass::after {
   height: 78%;
 }
-
-.shot-toggle__name {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 
 .modal--glass .modal__actions {
   flex-direction: column;

@@ -92,7 +92,7 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
           onClick={surprise}
           disabled={pourable.length === 0}
           aria-label="Surprise me: turn the ring to a random choice">
-          <Icon name="sparkles" size={28} /> Surprise me
+          <Icon name="sparkles" size={22} /> Surprise me
         </button>
         {!shotMode && (
           <button
@@ -100,16 +100,11 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
             onClick={aiDrinkRequest}
             disabled={aiState === 'thinking'}
             aria-label="AI drink: invent a new cocktail from the loaded bottles">
-            <Icon name="robot" size={28} /> AI drink
+            <Icon name="robot" size={22} /> AI drink
           </button>
         )}
-      </div>
-
-      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} />
-
-      <div className="home__pour">
         <button
-          className={`shot-toggle${shotMode ? ' shot-toggle--on' : ''}`}
+          className={`pill pill--shot${shotMode ? ' pill--on' : ''}`}
           role="switch"
           aria-checked={shotMode}
           onClick={() => {
@@ -117,13 +112,18 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
             setIndex(0);
             onShotMode(!shotMode);
           }}>
-          <span className="shot-toggle__glasses" aria-hidden="true">
+          <span className="pill__glasses" aria-hidden="true">
             {Array.from({length: SHOT_COUNT}, (_, i) => (
-              <span key={i} className="shot-toggle__glass" style={{transitionDelay: `${i * 50}ms`}} />
+              <span key={i} className="pill__glass" style={{transitionDelay: `${i * 40}ms`}} />
             ))}
           </span>
-          <span className="shot-toggle__name">shot mode</span>
+          Shot mode
         </button>
+      </div>
+
+      <RecipeCarousel recipes={items} index={front} onIndex={(i) => (touch(), setIndex(i))} />
+
+      <div className="home__pour">
         <button className="button button--primary button--xl pour-button" onClick={pour} disabled={items.length === 0}>
           Pour the drink
         </button>
