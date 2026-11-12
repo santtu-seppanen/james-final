@@ -20,6 +20,9 @@ interface Props {
 const MIN_SLOTS = 9; // keep it looking like a ring with only a few drinks
 const PX_PER_DRINK = 90; // how far a finger drags the ring by one drink
 const TAP_SLOP_PX = 8;
+const GAP_FRACTION = 0.05; // empty space between neighbouring drinks, of the width
+const SCALE_MIN = 0.42;
+const SCALE_RANGE = 0.58;
 
 export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const stage = useRef<HTMLDivElement>(null);
@@ -57,11 +60,12 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const position = front - drag; // fractional while dragging
   const step = (2 * Math.PI) / Math.max(count, MIN_SLOTS);
   const imageSize = Math.min(size.w * 0.46, size.h * 0.52, 230);
-  // The ring is as wide as the menu is long: a few drinks huddle near the
-  // front, a full menu spreads past the edges of the screen.
+  // Depth still curves the ring, but sideways the drinks are laid out by their
+  // edges: every pair of neighbours has the same gap, however far from the
+  // front. (A plain sin() would squeeze the far ones together.)
   const spread = Math.min(1, (count - 1) / 8);
-  const radiusX = size.w * (0.16 + 0.46 * spread);
   const radiusY = size.h * (0.06 + 0.14 * spread);
+  const gap = size.w * GAP_FRACTION;
   const current = recipes[front];
 
   // Along the portrait horizontal, whatever the screen is doing underneath.
@@ -112,9 +116,11 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
             if (delta < -count / 2) delta += count;
             const angle = delta * step;
             const depth = (Math.cos(angle) + 1) / 2; // 1 at the front, 0 at the back
-            const x = Math.sin(angle) * radiusX;
+            // Integral of (width * scale + gap) over delta, so edge gaps stay equal.
+            const meanScale = SCALE_MIN + SCALE_RANGE / 2;
+            const x = (meanScale * imageSize + gap) * delta + ((SCALE_RANGE / 2) * imageSize * Math.sin(angle)) / step;
             const y = (Math.cos(angle) - 0.35) * radiusY;
-            const scale = 0.42 + 0.58 * depth;
+            const scale = SCALE_MIN + SCALE_RANGE * depth;
             const isFront = i === front;
             return (
               <button
