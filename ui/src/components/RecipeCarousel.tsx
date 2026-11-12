@@ -21,8 +21,15 @@ const MIN_SLOTS = 9; // keep it looking like a ring with only a few drinks
 const PX_PER_DRINK = 90; // how far a finger drags the ring by one drink
 const TAP_SLOP_PX = 8;
 const GAP_FRACTION = 0.05; // empty space between neighbouring drinks, of the width
+const TURN_FRACTION = 0.6; // how far from the middle the ring turns back, of the width
 const SCALE_MIN = 0.42;
 const SCALE_RANGE = 0.58;
+
+// Fold a position into [-limit, limit] like a ball bouncing between two walls.
+function bounce(x: number, limit: number): number {
+  const t = (((x + limit) % (4 * limit)) + 4 * limit) % (4 * limit);
+  return t <= 2 * limit ? t - limit : 3 * limit - t;
+}
 
 export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const stage = useRef<HTMLDivElement>(null);
@@ -66,6 +73,9 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
   const spread = Math.min(1, (count - 1) / 8);
   const radiusY = size.h * (0.06 + 0.14 * spread);
   const gap = size.w * GAP_FRACTION;
+  // The ring turns back at the edges of the screen: drinks that would end up
+  // further out come back in behind the front ones, with the same gaps.
+  const turn = size.w * TURN_FRACTION;
   const current = recipes[front];
 
   // Along the portrait horizontal, whatever the screen is doing underneath.
@@ -118,9 +128,10 @@ export function RecipeCarousel({recipes, index, onIndex, fresh}: Props) {
             const depth = (Math.cos(angle) + 1) / 2; // 1 at the front, 0 at the back
             // Integral of (width * scale + gap) over delta, so edge gaps stay equal.
             const meanScale = SCALE_MIN + SCALE_RANGE / 2;
-            const x = (meanScale * imageSize + gap) * delta + ((SCALE_RANGE / 2) * imageSize * Math.sin(angle)) / step;
+            const flat = (meanScale * imageSize + gap) * delta + ((SCALE_RANGE / 2) * imageSize * Math.sin(angle)) / step;
             const y = (Math.cos(angle) - 0.35) * radiusY;
             const scale = SCALE_MIN + SCALE_RANGE * depth;
+            const x = bounce(flat, turn);
             const isFront = i === front;
             return (
               <button

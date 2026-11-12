@@ -670,8 +670,21 @@ img {
 }
 
 .bottle-strip--horizontal .bottle-slot__gauge {
-  width: 18px;
-  height: 60px;
+  width: 24px;
+  height: 130px;
+}
+
+/* Measuring scale: a long tick every 50 %, short ones every 10 %. The blend
+   keeps them readable over both the dark track and a bright fill. */
+.bottle-slot__gauge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  mix-blend-mode: difference;
+  background:
+    repeating-linear-gradient(to top, rgba(255, 255, 255, 0.85) 0 2px, transparent 2px 50%) 0 0 / 100% 100% no-repeat,
+    repeating-linear-gradient(to top, rgba(255, 255, 255, 0.6) 0 1px, transparent 1px 10%) 0 0 / 55% 100% no-repeat;
 }
 
 .bottle-slot__fill {
@@ -2299,7 +2312,7 @@ img {
 
 .bottle-strip--horizontal .bottle-slot__gauge {
   grid-row: 1;
-  height: 52px;
+  height: 130px;
 }
 
 .bottle-strip--horizontal .bottle-slot__name {
