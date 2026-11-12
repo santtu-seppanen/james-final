@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400">
+  <defs>
+    <linearGradient id="liquid" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c5cff"/>
+      <stop offset="1" stop-color="#17b8d8"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#fff" stop-opacity=".12"/>
+    </linearGradient>
+  </defs>
+  <path d="M90 110h220L200 230z" fill="url(#glass)" stroke="#fff" stroke-opacity=".7" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M112 136h176L200 226z" fill="url(#liquid)"/>
+  <path d="M200 230v100M145 335h110" stroke="#fff" stroke-opacity=".75" stroke-width="8" stroke-linecap="round"/>
+  <g fill="#fff">
+    <path d="M300 60l9 25 25 9-25 9-9 25-9-25-25-9 25-9z"/>
+    <path d="M95 55l5 14 14 5-14 5-5 14-5-14-14-5 14-5z" opacity=".85"/>
+    <path d="M335 175l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" opacity=".7"/>
+  </g>
+</svg>

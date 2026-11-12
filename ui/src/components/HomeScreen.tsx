@@ -20,6 +20,16 @@ interface Props {
   onPour: (recipe: Recipe) => void;
 }
 
+// The AI bartender is one more stop on the ring: pour it and James invents a drink.
+const AI_ITEM: Recipe = {
+  name: 'ai:new',
+  friendlyname: 'AI drink',
+  ingredients: [],
+  imageUrl: 'ai',
+  color: '#8b6cff',
+  subtitle: 'Let James invent one',
+};
+
 const SPIN_MS = 4000; // the ring turns by itself ...
 const PAUSE_MS = 12000; // ... except for this long after someone touches it
 
@@ -35,7 +45,9 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
   const lastTouch = useRef(0);
 
   const pourable = shotMode ? shotRecipes(bottles) : recipes.filter((r) => availability(r, bottles).pourable);
-  const items = pourable;
+  // Needs two loaded bottles to have anything to work with.
+  const aiPossible = !shotMode && bottles.filter((b) => b.name !== 'empty' && Number(b.capacity) > 0).length >= 2;
+  const items = aiPossible ? [...pourable, AI_ITEM] : pourable;
   const front = items.length > 0 ? ((index % items.length) + items.length) % items.length : 0;
 
   const touch = () => {
@@ -81,7 +93,8 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
 
   function pour() {
     const recipe = items[front];
-    if (recipe) onPour(recipe);
+    if (recipe === AI_ITEM) aiDrinkRequest();
+    else if (recipe) onPour(recipe);
   }
 
   return (
@@ -94,15 +107,6 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
           aria-label="Surprise me: turn the ring to a random choice">
           <Icon name="sparkles" size={22} /> Surprise me
         </button>
-        {!shotMode && (
-          <button
-            className="pill pill--ai"
-            onClick={aiDrinkRequest}
-            disabled={aiState === 'thinking'}
-            aria-label="AI drink: invent a new cocktail from the loaded bottles">
-            <Icon name="robot" size={22} /> AI drink
-          </button>
-        )}
         <button
           className={`pill pill--shot${shotMode ? ' pill--on' : ''}`}
           role="switch"
@@ -125,7 +129,7 @@ export function HomeScreen({bottles, recipes, focusDrink, onAiDrink, shotMode, o
 
       <div className="home__pour">
         <button className="button button--primary button--xl pour-button" onClick={pour} disabled={items.length === 0}>
-          Pour the drink
+          {items[front] === AI_ITEM ? 'Invent a drink' : 'Pour the drink'}
         </button>
       </div>
 
