@@ -24,10 +24,12 @@ Pi (server/cloud-sync.js, bearer DEVICE_TOKEN, cron ~1/min)
 `settings-schema.js` are CommonJS on purpose: the Worker bundles them and the
 Pi's Node 10 `require()`s them, so both sides validate with the same code.
 
-- `bottles[]` — slot order = servo order. `{name, serving (25|50), capacity, refilledAt?}`.
-  The Pi keeps its live fill level unless the bottle, its capacity or the
-  `refilledAt` stamp is newer than the last one it honoured for that slot
-  (= "refilled", level resets to full; rolling back to an older stamp doesn't).
+- `bottles[]` — slot order = servo order. `{name, serving (25|50), capacity, level?, levelSetAt?}`.
+  `capacity` is the bottle size. The Pi keeps its live fill level unless the
+  bottle or its size changed (= a new, full bottle). `level` (0..capacity) is a
+  hand correction of how much is left in the bottle: the Pi applies it once,
+  when its `levelSetAt` stamp is newer than the last one it saw for that slot.
+  There is no refill button; to take a bottle out, set the slot to `empty`.
 - `availableBottles[]` — names the pickers offer; every loaded bottle must be in it.
 - `recipes{id: {friendlyname, ingredients[{name, serving, manual?, wait?}], imageUrl?}}`
   — same shape as `recipes_config.json`. Ingredients must be available bottles

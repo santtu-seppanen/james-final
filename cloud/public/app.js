@@ -454,41 +454,50 @@
 
       var capacity = el('input', {
         type: 'number', min: 0, max: state.schema ? state.schema.maxCapacityMl : 5000, step: 1, value: bottle.capacity,
-        onchange: function (e) { bottle.capacity = Number(e.target.value); onDraftChange(); },
+        onchange: function (e) {
+          bottle.capacity = Number(e.target.value);
+          if (bottle.level > bottle.capacity) bottle.level = bottle.capacity;
+          onDraftChange();
+        },
+      });
+
+      // Level: how much is in the bottle now. Shows what the device last
+      // reported; typing a different number is a correction the device applies
+      // once, at its next check-in (the stamp makes it count only once).
+      var liveSame = live && live.name === bottle.name && live.originalCapacityMl > 0;
+      var applied = device && device.appliedConfig && device.appliedConfig.at ? Date.parse(device.appliedConfig.at) : 0;
+      var levelPending = bottle.levelSetAt && Date.parse(bottle.levelSetAt) > applied;
+      var shownLevel = levelPending ? bottle.level : liveSame ? live.capacityMl : bottle.capacity;
+      var level = el('input', {
+        type: 'number', min: 0, max: bottle.capacity, step: 1, value: shownLevel,
+        onchange: function (e) {
+          var n = Math.max(0, Math.min(bottle.capacity, Math.round(Number(e.target.value))));
+          if (liveSame && n === live.capacityMl) {
+            delete bottle.level;
+            delete bottle.levelSetAt;
+          } else {
+            bottle.level = n;
+            bottle.levelSetAt = new Date().toISOString();
+          }
+          onDraftChange();
+        },
       });
 
       var meta = [];
-      if (live && live.name === bottle.name && live.originalCapacityMl > 0) {
+      if (liveSame) {
         meta.push(el('span', {text: 'On device: ' + formatMl(live.capacityMl) + ' of ' + formatMl(live.originalCapacityMl) + ' left'}));
       } else if (live) {
         meta.push(el('span', {text: 'On device now: ' + live.name}));
       }
-      var currentBottle = state.current && state.current.config.bottles[slot];
-      var refillQueued = bottle.refilledAt && (!currentBottle || currentBottle.refilledAt !== bottle.refilledAt);
-      if (refillQueued) meta.push(el('span', {class: 'slot__tag', text: 'refill on publish'}));
+      if (levelPending) meta.push(el('span', {class: 'slot__tag', text: 'level applies at next check-in'}));
 
       list.appendChild(
         el('div', {class: 'slot'}, [
-          el('div', {class: 'slot__title'}, [
-            el('span', {text: 'Slot ' + (slot + 1)}),
-            el('span', {}, [
-              button(refillQueued ? 'Undo refill' : 'Refilled', function () {
-                if (refillQueued) {
-                  if (currentBottle && currentBottle.refilledAt) bottle.refilledAt = currentBottle.refilledAt;
-                  else delete bottle.refilledAt;
-                } else {
-                  bottle.refilledAt = new Date().toISOString();
-                }
-                onDraftChange();
-              }),
-              slot === draft.bottles.length - 1
-                ? button('Remove', function () { draft.bottles.pop(); onDraftChange(); }, 'btn--danger btn--small')
-                : null,
-            ]),
-          ]),
+          el('div', {class: 'slot__title'}, [el('span', {text: 'Slot ' + (slot + 1)})]),
           el('div', {class: 'slot__grid'}, [
             el('label', {class: 'field field--wide'}, ['Bottle', nameSelect]),
             el('label', {class: 'field'}, ['Capacity (ml)', capacity]),
+            el('label', {class: 'field'}, ['Level (ml)', level]),
             el('label', {class: 'field'}, ['Pour size', servingSelect]),
           ]),
           meta.length ? el('div', {class: 'slot__meta'}, meta) : null,
@@ -733,8 +742,7 @@
       var x = a.bottles[i], y = b.bottles[i];
       if (canonical(x) === canonical(y)) continue;
       var describe = function (b) { return b ? b.name + ' ' + b.capacity + ' ml / ' + b.serving + ' ml' : '(none)'; };
-      if (x && y && describe(x) === describe(y)) out.push('Slot ' + (i + 1) + ': ' + x.name + ' marked refilled at a different time');
-      else out.push('Slot ' + (i + 1) + ': ' + describe(x) + ' ← now ' + describe(y));
+      out.push('Slot ' + (i + 1) + ': ' + describe(x) + ' ← now ' + describe(y));
     }
     if (canonical(a.availableBottles) !== canonical(b.availableBottles)) out.push('Available bottles differ');
     var ids = {};

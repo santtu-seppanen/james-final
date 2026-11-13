@@ -6,7 +6,7 @@
 // Config shape (schemaVersion 1):
 // {
 //   "schemaVersion": 1,
-//   "bottles": [{"name": "vodka", "serving": 25, "capacity": 700, "refilledAt": "2026-..."}],  // index = servo slot
+//   "bottles": [{"name": "vodka", "serving": 25, "capacity": 700, "level": 350, "levelSetAt": "2026-..."}],  // index = servo slot; capacity = bottle size, level = ml left, set by hand
 //   "availableBottles": ["vodka", "tonic", ...],
 //   "recipes": {"<id>": {"friendlyname": "...", "ingredients": [{"name", "serving", "manual"?, "wait"?}], "imageUrl"?}},
 //   "settings": {"led": {...}, "audio": {...}, "show": {...}, "effects": {...}}   // see settings-schema.js
@@ -63,11 +63,18 @@ function validateBottles(input, availableByKey, errors) {
       errors.push(where + '.capacity: must be a whole number 0-' + MAX_CAPACITY_ML + ' ml');
     }
     var out = {name: name || String(b.name), serving: serving, capacity: capacity};
-    if (b.refilledAt !== undefined && b.refilledAt !== null && b.refilledAt !== '') {
-      if (typeof b.refilledAt !== 'string' || isNaN(Date.parse(b.refilledAt))) {
-        errors.push(where + '.refilledAt: must be an ISO date string');
+    // `level` is a correction of how much is left in the bottle. The device
+    // applies it once, when its levelSetAt stamp is newer than the last one it
+    // honoured for that slot.
+    if (b.level !== undefined && b.level !== null && b.level !== '') {
+      var level = Number(b.level);
+      if (!isFinite(level) || level < 0 || level !== Math.round(level) || level > capacity) {
+        errors.push(where + '.level: must be a whole number 0-' + capacity + ' ml (the bottle size)');
+      } else if (typeof b.levelSetAt !== 'string' || isNaN(Date.parse(b.levelSetAt))) {
+        errors.push(where + '.levelSetAt: an ISO date is required with level');
       } else {
-        out.refilledAt = b.refilledAt;
+        out.level = level;
+        out.levelSetAt = b.levelSetAt;
       }
     }
     return out;

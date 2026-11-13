@@ -84,7 +84,7 @@ function defaultState() {
   return {
     etag: null, // ETag of the last version we looked at (applied or rejected)
     applied: null, // {version, etag, status, error, at}
-    refills: {}, // slot -> refilledAt we last honoured
+    levelStamps: {}, // slot -> levelSetAt we last saw
     failures: 0,
     nextAttemptAt: null,
     lastCapacities: {}, // slot -> {name, capacity}, for the per-bottle counters
@@ -205,31 +205,31 @@ function createSyncClient(opts) {
 
   // Merges the published bottle list with the live fill levels: the cloud
   // knows what's in each slot and how big the bottle is, the Pi knows how
-  // much is left. A changed bottle/capacity, or a new refilledAt stamp,
-  // means "refilled" and the level resets to full - same semantics as the
-  // kiosk's BottleAdmin and remote-bottles.js.
-  //
-  // A refilledAt stamp only counts when it's newer than the last one
-  // honoured for that slot, so rolling back to an older version (or
-  // forward again past one without stamps) doesn't refill anything.
+  // much is left. A changed bottle or size means a new, full bottle. A
+  // `level` is a hand correction of how much is left: it is applied once,
+  // when its levelSetAt stamp is newer than the last one honoured for that
+  // slot, so a later poured-down level isn't set back by the same stamp
+  // coming round again (or by rolling the config back and forward).
   function mergeBottles(configBottles, liveBottles) {
-    var refills = Object.assign({}, state.refills);
+    var levelStamps = Object.assign({}, state.levelStamps);
     var merged = configBottles.map(function (b, slot) {
       var live = liveBottles[slot];
       var sameBottle = live && configValidate.bottleKey(live.name) === configValidate.bottleKey(b.name);
       var sameSize = live && Number(live.originalCapacity) === b.capacity;
-      var lastRefill = state.refills[slot] ? Date.parse(state.refills[slot]) : NaN;
-      var newRefill = Boolean(b.refilledAt) && !(Date.parse(b.refilledAt) <= lastRefill);
-      var refilled = !sameBottle || !sameSize || newRefill;
-      if (newRefill) refills[slot] = b.refilledAt;
+      var lastStamp = state.levelStamps[slot] ? Date.parse(state.levelStamps[slot]) : NaN;
+      var newLevel = b.level !== undefined && Boolean(b.levelSetAt) && !(Date.parse(b.levelSetAt) <= lastStamp);
+      if (b.levelSetAt && !(Date.parse(b.levelSetAt) <= lastStamp)) levelStamps[slot] = b.levelSetAt;
+      var fresh = !sameBottle || !sameSize;
+      var capacity = fresh ? b.capacity : Number(live.capacity);
+      if (newLevel) capacity = b.level;
       return {
         name: b.name,
         serving: b.serving,
-        capacity: refilled ? b.capacity : Number(live.capacity),
-        originalCapacity: refilled ? b.capacity : Number(live.originalCapacity),
+        capacity: capacity,
+        originalCapacity: fresh ? b.capacity : Number(live.originalCapacity),
       };
     });
-    return {bottles: merged, refills: refills};
+    return {bottles: merged, levelStamps: levelStamps};
   }
 
   function applyConfig(body) {
@@ -267,7 +267,7 @@ function createSyncClient(opts) {
       recordError('config', state.applied.error);
       return false;
     }
-    state.refills = merged.refills;
+    state.levelStamps = merged.levelStamps;
     state.etag = body.etag;
     state.applied = Object.assign(stamp, {status: 'applied', error: null});
     log('cloud-sync: applied config v' + body.version);

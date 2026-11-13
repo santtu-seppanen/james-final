@@ -176,31 +176,31 @@ describe('config sync', () => {
     expect(cloud.calls.filter((c) => c.path === '/api/device/config')[1].headers['if-none-match']).toBe('"v4-abc"');
   });
 
-  it('treats a new refilledAt stamp as a refill, once', async () => {
-    const withRefill = publishedConfig(5, {bottles: [{name: 'vodka', serving: 25, capacity: 700, refilledAt: '2026-11-10T11:00:00Z'}, {name: 'empty', serving: 50, capacity: 1000}]});
-    cloud.on('/api/device/config', withRefill, {status: 304, body: null});
+  it('applies a hand-set level once, and a changed bottle or size means a full one', async () => {
+    const withLevel = publishedConfig(5, {bottles: [{name: 'vodka', serving: 25, capacity: 700, level: 120, levelSetAt: '2026-11-10T11:00:00Z'}, {name: 'empty', serving: 50, capacity: 1000}]});
+    cloud.on('/api/device/config', withLevel, {status: 304, body: null});
     cloud.on('/api/version', {status: 200, body: {}}, {status: 200, body: {}});
     cloud.on('/api/device/stats', {status: 200, body: {ok: true}}, {status: 200, body: {ok: true}});
 
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0]).toEqual({name: 'vodka', serving: 25, capacity: 700, originalCapacity: 700});
+    expect(readJson('bottles_config.json')[0]).toEqual({name: 'vodka', serving: 25, capacity: 120, originalCapacity: 700});
 
-    // Someone pours; the next 304 cycle must not refill again
-    writeJson('bottles_config.json', [{name: 'vodka', serving: 25, capacity: 650, originalCapacity: 700}, {name: 'empty', serving: 50, capacity: 1000, originalCapacity: 1000}]);
+    // Someone pours; the next 304 cycle must not set the level again
+    writeJson('bottles_config.json', [{name: 'vodka', serving: 25, capacity: 100, originalCapacity: 700}, {name: 'empty', serving: 50, capacity: 1000, originalCapacity: 1000}]);
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(650);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(100);
 
-    // Re-applying the same stamp (e.g. a rollback carrying the old refilledAt) is not a refill either
-    cloud.on('/api/device/config', Object.assign({}, withRefill, {body: Object.assign({}, withRefill.body, {version: 6, etag: '"v6-abc"'})}));
+    // The same stamp coming round again (a rollback carrying it) is not a correction either
+    cloud.on('/api/device/config', Object.assign({}, withLevel, {body: Object.assign({}, withLevel.body, {version: 6, etag: '"v6-abc"'})}));
     cloud.on('/api/version', {status: 200, body: {}});
     cloud.on('/api/device/stats', {status: 200, body: {ok: true}});
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(650);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(100);
   });
 
-  it('does not refill when rolling back past a version without the stamp and forward again', async () => {
-    const stamped = (version, refilledAt) =>
-      publishedConfig(version, {bottles: [Object.assign({name: 'vodka', serving: 25, capacity: 700}, refilledAt ? {refilledAt} : {}), {name: 'empty', serving: 50, capacity: 1000}]});
+  it('does not set an old level again when the config rolls back past it and forward', async () => {
+    const stamped = (version, level, levelSetAt) =>
+      publishedConfig(version, {bottles: [Object.assign({name: 'vodka', serving: 25, capacity: 700}, levelSetAt ? {level, levelSetAt} : {}), {name: 'empty', serving: 50, capacity: 1000}]});
     const cycleWith = (response) => {
       cloud.on('/api/device/config', response);
       cloud.on('/api/version', {status: 200, body: {}});
@@ -209,22 +209,22 @@ describe('config sync', () => {
     const pour = (capacity) =>
       writeJson('bottles_config.json', [{name: 'vodka', serving: 25, capacity, originalCapacity: 700}, {name: 'empty', serving: 50, capacity: 1000, originalCapacity: 1000}]);
 
-    cycleWith(stamped(5, '2026-11-10T11:00:00Z'));
+    cycleWith(stamped(5, 300, '2026-11-10T11:00:00Z'));
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(700);
-    pour(600);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(300);
+    pour(250);
 
-    cycleWith(stamped(6, null)); // rollback to a version from before the refill
+    cycleWith(stamped(6, null, null)); // rollback to a version without a level
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(600);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(250);
 
-    cycleWith(stamped(7, '2026-11-10T11:00:00Z')); // and forward again: same old stamp
+    cycleWith(stamped(7, 300, '2026-11-10T11:00:00Z')); // and forward again: same old stamp
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(600);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(250);
 
-    cycleWith(stamped(8, '2026-11-10T11:30:00Z')); // a newer stamp is a real refill
+    cycleWith(stamped(8, 200, '2026-11-10T11:30:00Z')); // a newer stamp is a real correction
     await makeClient().runOnce();
-    expect(readJson('bottles_config.json')[0].capacity).toBe(700);
+    expect(readJson('bottles_config.json')[0].capacity).toBe(200);
   });
 
   it('refuses a response with a malformed etag (it would be sent back as a header)', async () => {

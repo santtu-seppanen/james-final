@@ -98,15 +98,25 @@ test('validates settings against the schema but preserves unknown keys', () => {
   assert.deepEqual(ok.config.settings.belt, {speed: 3});
 });
 
-test('refilledAt must be a date', () => {
+test('level is a whole number up to the bottle size and needs its stamp', () => {
   const cfg = goodConfig();
-  cfg.bottles[0].refilledAt = 'yesterday';
-  assert.equal(validateConfig(cfg).ok, false);
-  cfg.bottles[0].refilledAt = '2026-11-10T12:00:00.000Z';
+  cfg.bottles[0].level = 900;
+  cfg.bottles[0].levelSetAt = '2026-11-10T12:00:00.000Z';
+  assert.match(validateConfig(cfg).errors.join(), /bottles\[0\]\.level/);
+  cfg.bottles[0].level = 350;
+  delete cfg.bottles[0].levelSetAt;
+  assert.match(validateConfig(cfg).errors.join(), /levelSetAt/);
+  cfg.bottles[0].levelSetAt = 'yesterday';
+  assert.match(validateConfig(cfg).errors.join(), /levelSetAt/);
+  cfg.bottles[0].levelSetAt = '2026-11-10T12:00:00.000Z';
   const ok = validateConfig(cfg);
-  assert.equal(ok.ok, true);
-  assert.equal(ok.config.bottles[0].refilledAt, '2026-11-10T12:00:00.000Z');
+  assert.equal(ok.ok, true, ok.errors && ok.errors.join());
+  assert.equal(ok.config.bottles[0].level, 350);
+  assert.equal(ok.config.bottles[0].levelSetAt, '2026-11-10T12:00:00.000Z');
+  cfg.bottles[0].level = 0;
+  assert.equal(validateConfig(cfg).ok, true);
 });
+
 
 test('rejects garbage', () => {
   assert.equal(validateConfig(null).ok, false);
