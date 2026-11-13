@@ -135,7 +135,8 @@ GitHub Actions: `.github/workflows/deploy-cloud.yml` runs the tests on every
 push to `main` touching `cloud/` and, if they pass, applies the D1 migrations
 and runs `wrangler deploy` (the Worker publish to Cloudflare), using the
 `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. The API token
-needs Workers Scripts:Edit and D1:Edit on the account.
+needs Workers Scripts (Read + Edit), Account Settings:Read and D1:Edit on the
+account ("No access to the specified service" on deploy means one is missing).
 
 ## Local dev
 
