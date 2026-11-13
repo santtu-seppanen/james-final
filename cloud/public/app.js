@@ -484,9 +484,7 @@
       });
 
       var meta = [];
-      if (liveSame) {
-        meta.push(el('span', {text: 'On device: ' + formatMl(live.capacityMl) + ' of ' + formatMl(live.originalCapacityMl) + ' left'}));
-      } else if (live) {
+      if (live && !liveSame) {
         meta.push(el('span', {text: 'On device now: ' + live.name}));
       }
       if (levelPending) meta.push(el('span', {class: 'slot__tag', text: 'level applies at next check-in'}));
