@@ -1,7 +1,7 @@
 # James cloud — config + stats Worker
 
 Cloudflare Worker + D1. Holds the device's configuration (bottles, available
-bottles, recipes, LED/sound/show settings) as an append-only version history,
+bottles, recipes, LED/sound/show settings) as one current config (no history),
 ingests the Pi's status reports, and serves the config UI (`public/`).
 
 This Worker is the only backend: the Pi pulls its configuration from here and
@@ -9,7 +9,7 @@ reports its state here.
 
 ```
 config UI (public/, bearer ADMIN_TOKEN)
-   PUT /api/admin/config  ->  config_versions (v1, v2, ... + ETag)
+   PUT /api/admin/config  ->  config_versions (one row: revision + ETag)
                                       |
 Pi (server/cloud-sync.js, bearer DEVICE_TOKEN, cron ~1/min)
    GET  /api/device/config  If-None-Match  ->  304 | 200 {version, etag, config}
@@ -49,21 +49,18 @@ Device (`Authorization: Bearer <DEVICE_TOKEN>`):
 | | |
 |---|---|
 | `GET /api/device/config` | `If-None-Match: <etag>` → `304`; else `200 {version, etag, publishedAt, note, config}` + `ETag`. `404` before the first publish. |
-| `POST /api/device/recipes` | `{id, recipe}` → a drink made on the Pi (AI drink) is added to the cloud list (new version, author `device`); `200 existed` if the id is already there; `400 {errors[]}` if it doesn't validate. The cloud list is the truth and replaces the Pi's whenever it changes. |
+| `POST /api/device/recipes` | `{id, recipe}` → a drink made on the Pi (AI drink) is added to the cloud list (saved into the config, author `device`); `200 existed` if the id is already there; `400 {errors[]}` if it doesn't validate. The cloud list is the truth and replaces the Pi's whenever it changes. |
 | `POST /api/device/stats` | body: `{deviceVersion, uptimeS, serverReachable, appliedConfig{version, etag, status: applied\|rejected, error, at}, bottles[{slot, name, capacityMl, originalCapacityMl, servingMl}], recipes[], availableBottles[], counters{drinksServed, alcoholServedMl}, bottleCounters{name: {pours, ml}}, pours[{recipeId, friendlyName, alcoholMl, ingredients?, pouredAt}], errors[{at, source, message}], system{}}` → `{ok, serverTime, config: {version, etag}}` |
 
 Admin (`Authorization: Bearer <ADMIN_TOKEN>`):
 
 | | |
 |---|---|
-| `GET /api/admin/overview` | device state (+ `online`, 3 min window), current version, `pending` (device hasn't applied the current version) |
-| `GET /api/admin/config` | current version with body (live bottles included; the ETag covers both) |
+| `GET /api/admin/overview` | device state (+ `online`, 3 min window), the current config, `pending` (device hasn't applied it yet) |
+| `GET /api/admin/config` | the current config with body (live bottles included; the ETag covers both) |
 | `GET /api/admin/bottles` | the live bottle setup |
-| `PUT /api/admin/bottles` | `{bottles}` → replaces the bottle setup at once. **Bottles have no versions**: one live row, edited in place, not rolled back with the config. `PUT /api/admin/config` also saves the bottles it carries this way. |
-| `PUT /api/admin/config` | `{config, note?, baseVersion?}` → `201 {version, etag, config}`; `200 unchanged` if identical; `400 {errors[]}`; `409 {currentVersion}` if `baseVersion` is stale |
-| `GET /api/admin/config/versions?limit=` | history (no bodies) |
-| `GET /api/admin/config/versions/:v` | one version with body |
-| `POST /api/admin/config/rollback` | `{version, note?}` → new version with that body |
+| `PUT /api/admin/bottles` | `{bottles}` → replaces the bottle setup at once. One live row, edited in place. `PUT /api/admin/config` also saves the bottles it carries this way. |
+| `PUT /api/admin/config` | `{config, note?, baseVersion?}` → `201 {version, etag, config}` (`version` is a revision counter, not a history); `200 unchanged` if identical; `400 {errors[]}`; `409 {currentVersion}` if `baseVersion` is stale |
 | `GET /api/admin/stats?hours=` | pours, per-recipe totals, per-bottle counters, sampled history |
 | `GET /api/admin/schema` | settings schema + validation constants (for the UI) |
 

@@ -1,7 +1,8 @@
-// D1 access for config versions. Versions are append-only; the current
-// config is the highest version for the device. The bottle setup is NOT part
-// of the versions: it is one live row (bottle_setup) that is edited in place,
-// and getEffective() puts the two back together for the device and the UI.
+// D1 access for the config. There is only the current config: a save writes a
+// new row with the next revision number (the revision is what the ETag and
+// the UI's conflict check are built on) and drops the older rows. The bottle setup is NOT part
+// of the config rows: it is one live row (bottle_setup) edited in place, and
+// getEffective() puts the two back together for the device and the UI.
 
 // Default import: the shared module is CommonJS (it also runs on the Pi's Node 10).
 import validate from '../shared/config-validate.js';
@@ -30,7 +31,6 @@ function rowToVersion(row, withBody) {
     etag: row.etag,
     author: row.author,
     note: row.note,
-    rolledBackFrom: row.rolled_back_from,
     createdAt: row.created_at,
   };
   if (withBody) out.config = JSON.parse(row.body_json);
@@ -43,24 +43,6 @@ export async function getCurrent(db, deviceId, withBody = true) {
     .bind(deviceId)
     .first();
   return rowToVersion(row, withBody);
-}
-
-export async function getVersion(db, deviceId, version) {
-  const row = await db
-    .prepare('SELECT * FROM config_versions WHERE device_id = ? AND version = ?')
-    .bind(deviceId, version)
-    .first();
-  return rowToVersion(row, true);
-}
-
-export async function listVersions(db, deviceId, limit = 50) {
-  const rows = await db
-    .prepare(
-      'SELECT version, etag, author, note, rolled_back_from, created_at, length(body_json) AS size FROM config_versions WHERE device_id = ? ORDER BY version DESC LIMIT ?',
-    )
-    .bind(deviceId, limit)
-    .all();
-  return (rows.results ?? []).map((r) => ({...rowToVersion(r, false), size: r.size}));
 }
 
 export function stripBottles(config) {
@@ -112,11 +94,11 @@ export async function getEffective(db, deviceId) {
 // Appends a new version. `config` must already be validated/normalized.
 // Returns {version, etag, createdAt, unchanged} - unchanged when the body is
 // identical to the current version (nothing is inserted then).
-export async function publish(db, deviceId, config, {author, note, rolledBackFrom = null} = {}) {
+export async function publish(db, deviceId, config, {author, note} = {}) {
   config = stripBottles(config);
   const bodyJson = canonicalJson(config);
   const current = await getCurrent(db, deviceId, true);
-  if (current && canonicalJson(stripBottles(current.config)) === bodyJson && rolledBackFrom === null) {
+  if (current && canonicalJson(stripBottles(current.config)) === bodyJson) {
     return {...current, unchanged: true};
   }
   const version = (current?.version ?? 0) + 1;
@@ -129,13 +111,14 @@ export async function publish(db, deviceId, config, {author, note, rolledBackFro
       .prepare(
         'INSERT INTO config_versions (device_id, version, etag, body_json, author, note, rolled_back_from, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .bind(deviceId, version, etag, bodyJson, author ?? null, note ?? null, rolledBackFrom, createdAt)
+      .bind(deviceId, version, etag, bodyJson, author ?? null, note ?? null, null, createdAt)
       .run();
+    await db.prepare('DELETE FROM config_versions WHERE device_id = ? AND version < ?').bind(deviceId, version).run();
   } catch (e) {
     if (/UNIQUE|constraint/i.test(String(e && e.message))) {
       throw new HttpError('config changed since you loaded it', 409, {currentVersion: version});
     }
     throw e;
   }
-  return {version, etag, author, note, rolledBackFrom, createdAt, config, unchanged: false};
+  return {version, etag, author, note, createdAt, config, unchanged: false};
 }

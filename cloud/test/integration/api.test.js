@@ -34,7 +34,6 @@ test('health is public, everything else needs the right token', async () => {
   const res = await admin('GET', '/api/admin/overview', undefined, {origin: 'https://evil.example'});
   assert.equal(res.headers.get('access-control-allow-origin'), null);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
-  assert.equal((await admin('GET', '/api/admin/config/versions/99999999999999999999')).status, 404);
 });
 
 test('the config UI is served with a strict CSP and cannot be framed', async () => {
@@ -102,32 +101,12 @@ test('publishing validates, versions monotonically and serves ETags to the devic
   assert.equal(refetched.body.version, 2);
 });
 
-test('version history and rollback', async () => {
-  const list = await admin('GET', '/api/admin/config/versions');
-  assert.equal(list.status, 200);
-  assert.deepEqual(
-    list.body.versions.map((v) => [v.version, v.note]),
-    [
-      [2, 'dimmer'],
-      [1, 'first'],
-    ],
-  );
-
-  const one = await admin('GET', '/api/admin/config/versions/1');
-  assert.equal(one.status, 200);
-  assert.equal(one.body.config.settings.led.brightness, 60);
-  assert.equal((await admin('GET', '/api/admin/config/versions/99')).status, 404);
-
-  const rb = await admin('POST', '/api/admin/config/rollback', {version: 1});
-  assert.equal(rb.status, 201, rb.text);
-  assert.equal(rb.body.version, 3);
-  assert.equal(rb.body.rolledBackFrom, 1);
+test('there is only the current config: no history, no rollback', async () => {
+  assert.equal((await admin('GET', '/api/admin/config/versions')).status, 404);
+  assert.equal((await admin('POST', '/api/admin/config/rollback', {version: 1})).status, 404);
   const current = await admin('GET', '/api/admin/config');
-  assert.equal(current.body.version, 3);
-  assert.equal(current.body.config.settings.led.brightness, 60);
-  assert.equal(current.body.note, 'Rollback to v1');
-  // Rollback to the same body as v1 still makes a new version with a new ETag
-  assert.notEqual(current.body.etag, one.body.etag);
+  assert.equal(current.body.version, 2);
+  assert.equal(current.body.config.settings.led.brightness, 10);
 });
 
 test('device stats ingest, overview and stats', async () => {
@@ -154,8 +133,8 @@ test('device stats ingest, overview and stats', async () => {
   const res = await device('POST', '/api/device/stats', report);
   assert.equal(res.status, 200, res.text);
   assert.equal(res.body.ok, true);
-  // The response tells the device the current version (3, after the rollback)
-  assert.equal(res.body.config.version, 3);
+  // The response tells the device the current version
+  assert.equal(res.body.config.version, 2);
 
   const overview = await admin('GET', '/api/admin/overview');
   assert.equal(overview.body.device.online, true);
@@ -166,12 +145,12 @@ test('device stats ingest, overview and stats', async () => {
   assert.equal(overview.body.device.counters.drinksServed, 12);
   assert.equal(overview.body.device.errors.length, 1);
   assert.equal(overview.body.device.system.model, 'Raspberry Pi 3');
-  assert.equal(overview.body.config.version, 3);
+  assert.equal(overview.body.config.version, 2);
   // Device applied v2, current is v3 -> pending
   assert.equal(overview.body.pending, true);
 
   const current = await admin('GET', '/api/admin/config');
-  const ack = await device('POST', '/api/device/stats', {...report, appliedConfig: {version: 3, etag: current.body.etag, status: 'applied'}, pours: []});
+  const ack = await device('POST', '/api/device/stats', {...report, appliedConfig: {version: 2, etag: current.body.etag, status: 'applied'}, pours: []});
   assert.equal(ack.status, 200);
   assert.equal((await admin('GET', '/api/admin/overview')).body.pending, false);
 
@@ -209,18 +188,12 @@ test('bottles are live: edited in place, no version, the device sees them throug
   assert.equal(after.body.version, versionBefore);
   assert.notEqual(after.body.etag, before.body.etag);
   assert.equal(after.body.config.bottles[0].capacity, 500);
-  assert.equal((await admin('GET', '/api/admin/config/versions')).body.versions[0].version, versionBefore);
   const refetched = await device('GET', '/api/device/config', undefined, {'if-none-match': before.body.etag});
   assert.equal(refetched.status, 200);
   assert.equal(refetched.body.config.bottles[0].capacity, 500);
 
   // Saving the same bottles again changes nothing
   assert.equal((await admin('PUT', '/api/admin/bottles', {bottles})).status, 200);
-
-  // Rolling the config back leaves the bottles as they are now
-  const rb = await admin('POST', '/api/admin/config/rollback', {version: 1});
-  assert.equal(rb.status, 201, rb.text);
-  assert.equal((await admin('GET', '/api/admin/bottles')).body.bottles[0].capacity, 500);
 
   // Bad bottles are refused
   const bad = await admin('PUT', '/api/admin/bottles', {bottles: [{name: 'nonexistent', serving: 25, capacity: 1}]});
@@ -234,7 +207,7 @@ test('a drink made on the device is added to the cloud list, once', async () => 
 
   const config = await admin('GET', '/api/admin/config');
   assert.equal(config.body.config.recipes['1794506095289'].friendlyname, 'AI Test Fizz');
-  assert.equal((await admin('GET', '/api/admin/config/versions')).body.versions[0].author, 'device');
+  assert.equal(config.body.author, 'device');
 
   // Asking again with the same id changes nothing
   const again = await device('POST', '/api/device/recipes', {id: '1794506095289', recipe});

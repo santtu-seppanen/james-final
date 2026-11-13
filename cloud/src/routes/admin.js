@@ -1,19 +1,16 @@
 // Admin API (bearer ADMIN_TOKEN), used by the config UI in public/.
 //
-//   GET  /api/admin/overview                  device state + current config version
+//   GET  /api/admin/overview                  device state + the current config
 //   GET  /api/admin/config                    current config (full body, live bottles included)
-//   PUT  /api/admin/config                    {config, note?, baseVersion?} -> publish a new version; the
+//   PUT  /api/admin/config                    {config, note?, baseVersion?} -> save the config; the
 //                                             bottles in it are saved live instead (no version of their own)
 //   GET  /api/admin/bottles                   the live bottle setup
 //   PUT  /api/admin/bottles                   {bottles} -> replaces it at once, no version
-//   GET  /api/admin/config/versions?limit=    history (no bodies)
-//   GET  /api/admin/config/versions/:version  one version (full body)
-//   POST /api/admin/config/rollback           {version, note?} -> new version with that body
 //   GET  /api/admin/stats?hours=              pours, per-recipe/per-bottle totals, history
 //   GET  /api/admin/schema                    settings schema + validation constants
 
 import {json, error, readJson, HttpError, authorOf} from '../http.js';
-import {getCurrent, getEffective, getBottleSetup, getVersion, listVersions, publish, setBottleSetup} from '../config-store.js';
+import {getCurrent, getEffective, getBottleSetup, publish, setBottleSetup} from '../config-store.js';
 import validate from '../../shared/config-validate.js';
 import settingsSchema from '../../shared/settings-schema.js';
 
@@ -144,48 +141,6 @@ export async function putBottles(request, env) {
   if (!result.ok) return error('invalid bottles', 400, {errors: result.errors});
   const saved = await setBottleSetup(env.DB, env.DEVICE_ID, result.config.bottles, {author: authorOf(request)});
   return json(saved, saved.changed ? 201 : 200, {etag: saved.etag});
-}
-
-export async function versions(request, env) {
-  const url = new URL(request.url);
-  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit')) || 50));
-  return json({versions: await listVersions(env.DB, env.DEVICE_ID, limit)});
-}
-
-export async function version(request, env, versionNumber) {
-  const v = Number(versionNumber);
-  if (!Number.isInteger(v) || v < 1) return error('bad version', 400);
-  const found = await getVersion(env.DB, env.DEVICE_ID, v);
-  if (!found) return error('no such version', 404);
-  return json(found);
-}
-
-export async function rollback(request, env) {
-  let body;
-  try {
-    body = await readJson(request);
-  } catch (e) {
-    if (e instanceof HttpError) return error(e.message, e.status);
-    throw e;
-  }
-  const v = Number(body?.version);
-  if (!Number.isInteger(v) || v < 1) return error('version required', 400);
-  const target = await getVersion(env.DB, env.DEVICE_ID, v);
-  if (!target) return error('no such version', 404);
-
-  // Re-validate: the schema may have grown since that version was stored.
-  // Bottles aren't rolled back: they are live, whatever is set now stays.
-  const live = await getBottleSetup(env.DB, env.DEVICE_ID);
-  const result = validate.validateConfig(live ? {...target.config, bottles: live.bottles} : target.config);
-  if (!result.ok) return error('that version no longer validates', 400, {errors: result.errors});
-
-  const published = await publish(env.DB, env.DEVICE_ID, result.config, {
-    author: authorOf(request),
-    note: typeof body.note === 'string' && body.note ? body.note.slice(0, 200) : `Rollback to v${v}`,
-    rolledBackFrom: v,
-  });
-  const effective = await getEffective(env.DB, env.DEVICE_ID);
-  return json({version: published.version, etag: effective.etag, createdAt: published.createdAt, rolledBackFrom: v}, 201);
 }
 
 export async function stats(request, env) {

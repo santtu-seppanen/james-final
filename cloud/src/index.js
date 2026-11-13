@@ -15,9 +15,6 @@ const ADMIN_ROUTES = [
   ['PUT', /^\/api\/admin\/config$/, admin.putConfig],
   ['GET', /^\/api\/admin\/bottles$/, admin.getBottles],
   ['PUT', /^\/api\/admin\/bottles$/, admin.putBottles],
-  ['GET', /^\/api\/admin\/config\/versions$/, admin.versions],
-  ['GET', /^\/api\/admin\/config\/versions\/(\d{1,9})$/, admin.version],
-  ['POST', /^\/api\/admin\/config\/rollback$/, admin.rollback],
   ['GET', /^\/api\/admin\/stats$/, admin.stats],
   ['GET', /^\/api\/admin\/schema$/, admin.schema],
 ];

@@ -1,11 +1,12 @@
 // James config UI. Plain JS, no build step.
 //
-// Model: `current` is the published config (from GET /api/admin/config),
+// Model: `current` is the one live config (from GET /api/admin/config),
 // `draft` is a deep copy the user edits. When they differ the publish bar
-// appears; Publish PUTs the draft with baseVersion = current.version so a
-// concurrent publish from another tab is rejected (409) instead of silently
-// overwritten. After publishing, the overview is polled until the device
-// reports it applied that version (or rejected it).
+// appears; Publish PUTs the draft with baseVersion = current.version (a
+// revision counter, not a history) so a concurrent change from another tab
+// is rejected (409) instead of silently overwritten. After publishing, the
+// overview is polled until the device reports it applied the config (or
+// rejected it).
 (function () {
   'use strict';
 
@@ -24,11 +25,10 @@
     token: readToken(),
     schema: null,
     overview: null,
-    current: null, // {version, etag, config, ...} or null when nothing is published
+    current: null, // {version (revision counter), etag, config, ...} or null when nothing is published
     draft: null,
     stats: null,
-    versions: [],
-    tab: 'device',
+    tab: 'home',
     publishing: false,
   };
   var pollTimer = null;
@@ -198,24 +198,19 @@
         throw e;
       }),
       api('GET', '/api/admin/stats?hours=' + STATS_HOURS),
-      api('GET', '/api/admin/config/versions?limit=100'),
     ])
       .then(function (results) {
         state.schema = results[0];
         state.overview = results[1];
         state.current = results[2];
         state.stats = results[3];
-        state.versions = results[4].versions;
         if (state.current) {
           state.draft = clone(state.current.config);
           showNotice('');
         } else {
-          state.draft = draftFromDevice(state.overview.device);
-          showNotice(
-            state.overview.device
-              ? 'No config published yet. This draft was built from the device\'s last report - review it and publish.'
-              : 'No config published yet and the device has not checked in. Start from this empty draft or wait for the device.'
-          );
+          // Nothing published yet: start from an empty config.
+          state.draft = emptyConfig();
+          showNotice('No config published yet. Fill in the bottles and recipes and publish.');
         }
         renderAll();
         schedulePoll();
@@ -225,33 +220,9 @@
       });
   }
 
-  // Builds a config from what the device last reported (its local files),
-  // used to bootstrap before anything is published and for "use device state".
-  function draftFromDevice(device) {
+  function emptyConfig() {
     var defaults = state.schema ? state.schema.settingsDefaults : {};
-    if (!device) {
-      return {schemaVersion: 1, availableBottles: DEFAULT_AVAILABLE.slice(), bottles: [], recipes: {}, settings: clone(defaults)};
-    }
-    var available = (device.availableBottles || []).slice();
-    (device.bottles || []).forEach(function (b) {
-      if (b.name && available.indexOf(b.name) === -1) available.push(b.name);
-    });
-    var recipes = {};
-    (device.recipes || []).forEach(function (r) {
-      if (!r.id) return;
-      var recipe = {friendlyname: r.friendlyname || r.friendlyName || r.id, ingredients: r.ingredients || []};
-      if (r.imageUrl) recipe.imageUrl = r.imageUrl;
-      recipes[r.id] = recipe;
-    });
-    return {
-      schemaVersion: 1,
-      availableBottles: available.length ? available : DEFAULT_AVAILABLE.slice(),
-      bottles: (device.bottles || []).map(function (b) {
-        return {name: b.name, serving: b.servingMl || 25, capacity: b.originalCapacityMl || b.capacityMl || 0};
-      }),
-      recipes: recipes,
-      settings: state.draft && state.draft.settings ? clone(state.draft.settings) : clone(defaults),
-    };
+    return {schemaVersion: 1, availableBottles: DEFAULT_AVAILABLE.slice(), bottles: [], recipes: {}, settings: clone(defaults)};
   }
 
   function refreshOverview() {
@@ -264,7 +235,6 @@
         state.stats = results[1];
         renderStatus();
         renderDevice();
-        renderVersions();
       })
       .catch(function (e) {
         if (e.message !== 'unauthorized') $('status-text').textContent = 'Could not reach backend';
@@ -293,7 +263,6 @@
     renderBottles();
     renderRecipes();
     renderSettings();
-    renderVersions();
     renderPublishBar();
   }
 
@@ -324,11 +293,11 @@
     var current = state.overview && state.overview.config;
     if (device && current && device.appliedConfig.status === 'rejected' && device.appliedConfig.etag === current.etag) {
       pending.className = 'banner banner--error';
-      pending.textContent = 'The device rejected v' + current.version + ': ' + (device.appliedConfig.error || 'unknown error') + '. It keeps running its previous config.';
+      pending.textContent = 'The device rejected the current config: ' + (device.appliedConfig.error || 'unknown error') + '. It keeps running its previous config.';
       pending.hidden = false;
     } else if (state.overview && state.overview.pending && current) {
       pending.className = 'banner banner--info';
-      pending.textContent = 'v' + current.version + ' published - waiting for the device to apply it (it polls about once a minute)…';
+      pending.textContent = 'Changes saved - waiting for the device to apply them (it polls about once a minute)…';
       pending.hidden = false;
     } else {
       pending.hidden = true;
@@ -354,7 +323,6 @@
     $('d-uptime').textContent = device ? formatDuration(device.uptimeS) : '–';
     $('d-drinks').textContent = counters.drinksServed != null ? counters.drinksServed : '–';
     $('d-alcohol').textContent = counters.alcoholServedMl != null ? formatMl(counters.alcoholServedMl) : '–';
-    $('import-device').disabled = !device;
 
     var info = $('d-info');
     info.innerHTML = '';
@@ -366,8 +334,8 @@
         ['Last check-in', formatDate(device.lastSeen) + ' (' + formatRelative(device.lastSeen) + ')'],
         ['Drink server', device.serverReachable === false ? 'not responding' : device.serverReachable ? 'running' : 'unknown'],
         ['Deployed version', device.deviceVersion || 'unknown'],
-        ['Config on device', applied.version ? 'v' + applied.version + ' (' + (applied.status || '?') + (applied.at ? ', ' + formatRelative(applied.at) : '') + ')' : 'none'],
-        ['Current config', state.overview.config ? 'v' + state.overview.config.version + ' (' + formatRelative(state.overview.config.createdAt) + ')' : 'none published'],
+        ['Config on device', applied.status ? applied.status + (applied.at ? ' ' + formatRelative(applied.at) : '') : 'none'],
+        ['Config changed', state.overview.config ? formatRelative(state.overview.config.createdAt) : 'never published'],
       ];
       if (applied.status === 'rejected' && applied.error) rows.push(['Rejection reason', applied.error]);
       var sys = device.system || {};
@@ -702,86 +670,6 @@
     }
   }
 
-  // --- Versions tab ---
-
-  function renderVersions() {
-    var list = $('version-list');
-    list.innerHTML = '';
-    var device = state.overview && state.overview.device;
-    var applied = device ? device.appliedConfig : {};
-    var current = state.overview && state.overview.config;
-    if (!state.versions.length) list.innerHTML = '<li class="empty-state">Nothing published yet.</li>';
-    state.versions.forEach(function (v) {
-      var badges = [];
-      if (current && v.version === current.version) badges.push(el('span', {class: 'version__badge version__badge--current', text: 'current'}));
-      if (applied.version === v.version && applied.status === 'applied') badges.push(el('span', {class: 'version__badge version__badge--device', text: 'on device'}));
-      if (applied.version === v.version && applied.status === 'rejected') badges.push(el('span', {class: 'version__badge version__badge--rejected', text: 'rejected by device'}));
-      list.appendChild(
-        el('li', {class: 'version'}, [
-          el('div', {class: 'version__main'}, [
-            el('div', {class: 'version__title'}, ['v' + v.version + (v.note ? ' - ' + v.note : '')].concat(badges)),
-            el('div', {class: 'version__meta', text: formatDate(v.createdAt) + ' · ' + (v.author || 'admin') + (v.rolledBackFrom ? ' · rollback of v' + v.rolledBackFrom : '')}),
-          ]),
-          button('View', function () { openVersionDialog(v.version); }),
-        ])
-      );
-    });
-  }
-
-  var viewingVersion = null;
-
-  function describeDiff(a, b) {
-    // a = this version, b = current. Lists what differs at section/recipe/slot level.
-    var out = [];
-    if (!b) return ['(no current version to compare with)'];
-    // Bottles are live, not versioned: only old versions still carry them.
-    var slots = a.bottles && b.bottles ? Math.max(a.bottles.length, b.bottles.length) : 0;
-    for (var i = 0; i < slots; i++) {
-      var x = a.bottles[i], y = b.bottles[i];
-      if (canonical(x) === canonical(y)) continue;
-      var describe = function (b) { return b ? b.name + ' ' + b.capacity + ' ml / ' + b.serving + ' ml' : '(none)'; };
-      out.push('Slot ' + (i + 1) + ': ' + describe(x) + ' ← now ' + describe(y));
-    }
-    if (canonical(a.availableBottles) !== canonical(b.availableBottles)) out.push('Available bottles differ');
-    var ids = {};
-    Object.keys(a.recipes).concat(Object.keys(b.recipes)).forEach(function (id) { ids[id] = true; });
-    Object.keys(ids).forEach(function (id) {
-      var x = a.recipes[id], y = b.recipes[id];
-      if (!x) out.push('Recipe "' + (y.friendlyname) + '" would be removed');
-      else if (!y) out.push('Recipe "' + x.friendlyname + '" would be added');
-      else if (canonical(x) !== canonical(y)) out.push('Recipe "' + x.friendlyname + '" differs');
-    });
-    Object.keys(Object.assign({}, a.settings, b.settings)).forEach(function (section) {
-      var x = a.settings[section] || {}, y = b.settings[section] || {};
-      Object.keys(Object.assign({}, x, y)).forEach(function (key) {
-        if (canonical(x[key]) !== canonical(y[key])) out.push('Setting ' + section + '.' + key + ': ' + JSON.stringify(x[key]) + ' ← now ' + JSON.stringify(y[key]));
-      });
-    });
-    return out.length ? out : ['Identical to the current version'];
-  }
-
-  function openVersionDialog(version) {
-    api('GET', '/api/admin/config/versions/' + version)
-      .then(function (v) {
-        viewingVersion = v;
-        $('version-dialog-title').textContent = 'v' + v.version + (v.note ? ' - ' + v.note : '');
-        var meta = $('version-meta');
-        meta.innerHTML = '';
-        [['Published', formatDate(v.createdAt)], ['By', v.author || 'admin'], ['ETag', v.etag], ['Bottles', v.config.bottles ? v.config.bottles.map(function (b) { return b.name; }).join(', ') : 'live (not part of versions)'], ['Recipes', String(Object.keys(v.config.recipes).length)]].forEach(function (row) {
-          meta.appendChild(el('dt', {text: row[0]}));
-          meta.appendChild(el('dd', {text: row[1]}));
-        });
-        var diff = $('version-diff');
-        diff.innerHTML = '';
-        describeDiff(v.config, state.current ? state.current.config : null).forEach(function (line) { diff.appendChild(el('li', {text: line})); });
-        $('version-json').textContent = JSON.stringify(v.config, null, 2);
-        var isCurrent = state.current && state.current.version === v.version;
-        $('version-rollback').disabled = Boolean(isCurrent);
-        $('version-dialog').showModal();
-      })
-      .catch(function (e) { showNotice('Could not load version: ' + e.message, true); });
-  }
-
   // --- Publish bar ---
 
   function renderPublishBar() {
@@ -790,7 +678,7 @@
     bar.hidden = !dirty;
     $('publish-status').textContent = state.publishing
       ? 'Publishing…'
-      : 'Unsaved changes' + (state.current ? ' (based on v' + state.current.version + ')' : ' (first version)');
+      : 'Unsaved changes';
     $('publish').disabled = state.publishing;
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (tab) {
       var badge = tab.querySelector('.tab__badge');
@@ -831,17 +719,14 @@
         state.draft = clone(result.config);
         $('publish-note').value = '';
         showNotice(
-          result.unchanged
-            ? result.bottlesChanged
-              ? 'Bottles saved. They apply at once - bottles have no versions.'
-              : 'Nothing changed.'
-            : 'Published v' + result.version + '. The device applies it on its next check-in.' + (result.bottlesChanged ? ' Bottles were saved live.' : '')
+          result.unchanged && !result.bottlesChanged
+            ? 'Nothing changed.'
+            : 'Saved. The device applies it on its next check-in.'
         );
-        return Promise.all([api('GET', '/api/admin/config/versions?limit=100'), api('GET', '/api/admin/overview')]);
+        return api('GET', '/api/admin/overview');
       })
-      .then(function (results) {
-        state.versions = results[0].versions;
-        state.overview = results[1];
+      .then(function (overview) {
+        state.overview = overview;
         renderAll();
         schedulePoll();
       })
@@ -849,7 +734,7 @@
         if (e.message === 'unauthorized') return;
         errorsNode.innerHTML = '';
         if (e.status === 409) {
-          errorsNode.appendChild(el('li', {text: 'Someone published v' + e.data.currentVersion + ' meanwhile. Reload the page (your draft will be lost) or load that version and redo your edits.'}));
+          errorsNode.appendChild(el('li', {text: 'Someone changed the config meanwhile. Reload the page (your draft will be lost) and redo your edits.'}));
         } else if (e.data && e.data.errors) {
           e.data.errors.forEach(function (line) { errorsNode.appendChild(el('li', {text: line})); });
         } else {
@@ -887,13 +772,6 @@
     }
   });
 
-  $('import-device').addEventListener('click', function () {
-    if (!confirm('Replace the draft\'s bottles, available bottles and recipes with what the device reported? Settings are kept.')) return;
-    state.draft = draftFromDevice(state.overview.device);
-    onDraftChange();
-    state.tab = 'bottles';
-    renderTabs();
-  });
 
   $('add-slot').addEventListener('click', function () {
     var name = state.draft.availableBottles.indexOf('empty') !== -1 ? 'empty' : state.draft.availableBottles[0];
@@ -919,31 +797,10 @@
   });
   IMAGE_NAMES.forEach(function (name) { $('image-names').appendChild(el('option', {value: name})); });
 
-  $('version-close').addEventListener('click', function () { $('version-dialog').close(); });
-  $('version-load').addEventListener('click', function () {
-    if (!viewingVersion) return;
-    state.draft = clone(viewingVersion.config);
-    // Bottles aren't part of a version: keep the live ones.
-    state.draft.bottles = clone(state.current.config.bottles);
-    $('version-dialog').close();
-    onDraftChange();
-    showNotice('v' + viewingVersion.version + ' loaded into the draft - publish to make it current.');
-  });
-  $('version-rollback').addEventListener('click', function () {
-    if (!viewingVersion) return;
-    if (!confirm('Publish v' + viewingVersion.version + ' as the new current version?')) return;
-    api('POST', '/api/admin/config/rollback', {version: viewingVersion.version})
-      .then(function () {
-        $('version-dialog').close();
-        boot();
-      })
-      .catch(function (e) { showNotice('Rollback failed: ' + e.message, true); });
-  });
-
   $('publish').addEventListener('click', publish);
   $('discard').addEventListener('click', function () {
     if (!confirm('Discard unsaved changes?')) return;
-    state.draft = state.current ? clone(state.current.config) : draftFromDevice(state.overview && state.overview.device);
+    state.draft = state.current ? clone(state.current.config) : emptyConfig();
     onDraftChange();
   });
 
