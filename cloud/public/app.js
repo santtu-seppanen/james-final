@@ -495,7 +495,7 @@
           el('div', {class: 'slot__grid'}, [
             el('label', {class: 'field field--wide'}, ['Bottle', nameSelect]),
             el('label', {class: 'field'}, ['Capacity (ml)', capacity]),
-            el('label', {class: 'field'}, ['Level (ml)', level]),
+            el('label', {class: 'field'}, ['Current level (ml)', level]),
             el('label', {class: 'field'}, ['Pour size', servingSelect]),
           ]),
           meta.length ? el('div', {class: 'slot__meta'}, meta) : null,
